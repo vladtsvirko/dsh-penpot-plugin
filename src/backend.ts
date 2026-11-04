@@ -32,7 +32,7 @@ export interface PenpotFileSummary {
 
 /** What a backend must provide. Every method throws on refusal. */
 export interface PenpotBackend {
-  /** Which implementation is live; surfaced by the status tool and `/about`-style checks. */
+  /** Which implementation is live; surfaced by the status tool and `/system status`-style checks. */
   readonly kind: 'api' | 'mcp'
   /** Short human label, e.g. `api http://192.168.2.50:8090` or `mcp penpot`. */
   readonly label: string

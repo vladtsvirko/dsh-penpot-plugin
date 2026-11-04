@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+Docs only. The setup path now says `/system components` (the command was renamed
+from `/system manage`).
+
 ## 0.1.1
 
 - Docs only. The install section now leads with the DSH setup's design

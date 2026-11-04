@@ -16,7 +16,7 @@ The setup's optional design component installs Penpot, the `penpot` CLI and this
 plugin together, with the plugin ref pinned in `components.json`:
 
 ```sh
-./install.sh --design docker       # or add it later: /system manage -> Enable
+./install.sh --design docker       # or add it later: /system components -> Enable
 ```
 
 That path is self-contained: it writes `PENPOT_API_URL` and
