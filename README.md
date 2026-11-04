@@ -10,17 +10,47 @@ when one is already running.
 
 ## Install
 
+### In the DSH setup (recommended)
+
+The setup's optional design component installs Penpot, the `penpot` CLI and this
+plugin together, with the plugin ref pinned in `components.json`:
+
 ```sh
-dsh plugin --profile web add github:vladtsvirko/dsh-penpot-plugin
+./install.sh --design docker       # or add it later: /system manage -> Enable
 ```
 
-Restart the runtime after adding it. The plugin row reads its credentials from
-the environment:
+That path is self-contained: it writes `PENPOT_API_URL` and
+`PENPOT_ACCESS_TOKEN` into the runtime environment, installs the pinned plugin
+and mounts a managed `dsh-penpot` row. Nothing below is needed.
+
+### Into any other runtime
+
+Pin a tag and allow the package's build, or pnpm ≥ 10 refuses to run `prepare`
+and the install aborts before any code exists. pnpm prints the exact
+`allowBuilds` key; add it to the profile's `pnpm-workspace.yaml` and retry:
+
+```yaml
+allowBuilds:
+  dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
+```
+
+```sh
+dsh plugin --profile web add github:vladtsvirko/dsh-penpot-plugin#v0.1.0
+```
+
+Restart the runtime after adding it. The row reads its credentials from the
+environment of the **runtime process** — exporting them in a shell later does
+not reach a running runtime:
 
 ```sh
 export PENPOT_API_URL='http://192.168.2.50:8090'   # no /api/rpc suffix needed
 export PENPOT_ACCESS_TOKEN='...'                    # Penpot: Settings -> Access tokens
 ```
+
+In the Docker setup that means adding both to `.env` and recreating the
+container (`docker compose up -d dsh`); the design component does it for you.
+Ask the agent for `penpot_status` to verify: it names the live backend and
+endpoint, and a missing variable is reported by name.
 
 ## Tools
 
