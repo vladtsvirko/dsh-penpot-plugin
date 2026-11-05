@@ -9,6 +9,8 @@
 - **Bundle patch corrected.** `cordis.patch.yml` still passed `backend: auto`
   and `mcpServer`, which 0.2.0 removed. The row now declares only `apiUrl` and
   `token`, so a standalone install no longer starts with a stale config key.
+- **The package description no longer claims an MCP backend.** It was stale
+  since 0.2.0 and is the text GitHub and npm show.
 - **Standalone is documented as a first-class path** (`docs/STANDALONE.md`): no
   setup, no managed row, same tools. The setup remains the convenience wrapper,
   not a requirement.
