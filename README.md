@@ -32,7 +32,8 @@ See [docs/STANDALONE.md](docs/STANDALONE.md) for the complete walkthrough.
 
 The plugin is a normal DSH bundle: it works in any profile, with or without the
 setup. It needs a Penpot instance and an access token, nothing else from this
-project. Pin a tag and allow the package's build, or pnpm ≥ 10 refuses to run
+project. It is distributed as GitHub tags, not npm yet (that waits for
+`1.0.0`). Pin a tag and allow the package's build, or pnpm ≥ 10 refuses to run
 `prepare` and the install aborts before any code exists. pnpm prints the exact
 `allowBuilds` key; add it to the profile's `pnpm-workspace.yaml` and retry:
 
