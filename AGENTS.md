@@ -14,6 +14,14 @@ together with `dsh-tg-docker-setup` or `dsh-telegram-connector`.
 - Credentials never go in `cordis.patch.yml`; the row reads them from the
   environment.
 
+## Repository metadata
+
+The upstream DSH README asks plugin repositories to carry the GitHub topic
+`dsh-plugin` (the About box, not a file). Keep it set, along with
+`deepseek-harness` and the product topic (`telegram` or `penpot`). Topics need
+repository administration rights; `gh repo edit --add-topic dsh-plugin` or the
+API's `PUT /repos/{owner}/{repo}/topics` are the two ways to set them.
+
 ## Release checklist
 
 1. `npm run typecheck && npm test && npm run build`.

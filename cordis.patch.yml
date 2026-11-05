@@ -2,9 +2,8 @@
     - id: dsh-penpot
       name: dsh-penpot-plugin
       config:
-        # The API backend needs both; the environment is the safe place for them.
+        # Both are required for a working backend; the environment is the safe
+        # place for them. An empty pair is supported: the plugin still loads and
+        # penpot_status reports that it is not configured.
         apiUrl: !!js process.env.PENPOT_API_URL ?? ""
         token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ""
-        # auto: use an existing mcp__penpot__* tool set when present, else the API.
-        backend: auto
-        mcpServer: penpot
