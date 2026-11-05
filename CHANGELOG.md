@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- **MCP backend removed.** The plugin talks to Penpot's local HTTP RPC only.
+  `backend`, `mcpServer` and the `mcp__<server>__*` adapter are gone; the
+  read-only MCP path could not export and could silently replace the API via
+  `auto`.
+- The plugin now loads even when `PENPOT_API_URL`/`PENPOT_ACCESS_TOKEN` are
+  empty: `penpot_status` reports `none`, the other tools throw one readable
+  configuration error.
+- README/DESIGN updated for the systemd/Podman setup (`--design penpot`).
+
 ## 0.1.2
 
 Docs only. The setup path now says `/system components` (the command was renamed

@@ -1,10 +1,9 @@
 /**
  * dsh-penpot — Penpot tools for a DeepSeek Harness runtime.
  *
- * The plugin is a thin shell: it picks a backend (direct HTTP API, or an MCP
- * server already registered in this runtime), then exposes a small, stable tool
- * surface. Everything that talks to Penpot lives behind `PenpotBackend`, so the
- * model-facing names and the backend can be decided independently.
+ * The plugin is a thin shell over Penpot's HTTP RPC API: one local backend,
+ * one small stable tool surface. There is deliberately no MCP path; see
+ * docs/DESIGN.md in the setup repository.
  *
  * v0.1 is read + export. Writing (Penpot's `update-file` change format) is the
  * open design question; see docs/DESIGN.md.
@@ -12,44 +11,22 @@
  * @module dsh-penpot-plugin
  */
 
-import { randomUUID } from 'node:crypto'
 import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Context } from '@deepseek-ai/cordis'
-import { selectBackend, type PenpotConfig } from './select.js'
+import { createApiBackend } from './api-backend.js'
 import type { PenpotBackend, PenpotRef } from './backend.js'
-import type { ToolInvoker } from './mcp-backend.js'
 
 export const name = 'dsh-penpot'
-export const inject = ['tools']
 
 export const Config = Schema.object({
   apiUrl: Schema.string().default(''),
   token: Schema.string().default(''),
-  backend: Schema.union(['auto', 'api', 'mcp']).default('auto'),
-  mcpServer: Schema.string().default('penpot'),
 })
 
-export interface PenpotPluginConfig extends PenpotConfig {}
-
-/** The slice of the runtime tool registry this plugin uses. */
-interface RuntimeTools {
-  get(name: string): unknown
-  execute(input: unknown): Promise<unknown>
-}
-
-/**
- * Adapt the runtime's tool registry to the narrow invoker the MCP backend needs.
- *
- * TODO(v0.2): `execute` also expects a caller agent and a schema in some modes;
- * verify the invocation shape against a real MCP tool set before trusting the
- * MCP backend for anything but reads.
- */
-function adaptTools(tools: RuntimeTools): ToolInvoker {
-  return {
-    get: (toolName) => tools.get(toolName),
-    invoke: (toolName, args) => tools.execute({ callId: randomUUID(), name: toolName, arguments: args }),
-  }
+export interface PenpotPluginConfig {
+  apiUrl?: string
+  token?: string
 }
 
 /** Render one list result: id and name per line, backend in parentheses. */
@@ -60,26 +37,37 @@ function describeRefs(value: { backend: string; items: readonly PenpotRef[] }): 
 }
 
 export function apply(ctx: Context, config: PenpotPluginConfig): void {
-  const tools = (ctx as unknown as { tools: RuntimeTools }).tools
-  const backend: PenpotBackend = selectBackend(config, { tools: adaptTools(tools) })
+  const configured = typeof config.apiUrl === 'string' && config.apiUrl.length > 0
+    && typeof config.token === 'string' && config.token.length > 0
+  const backend: PenpotBackend | undefined = configured
+    ? createApiBackend({ apiUrl: config.apiUrl as string, token: config.token as string })
+    : undefined
+  const requireBackend = (): PenpotBackend => {
+    if (backend === undefined) {
+      throw new Error('Penpot is not configured: set PENPOT_API_URL and PENPOT_ACCESS_TOKEN, then restart dsh')
+    }
+    return backend
+  }
 
   ctx.tools.register(defineTool({
     name: 'penpot_status',
-    description: 'Report which Penpot backend this runtime is using. Call it when a Penpot tool fails, to see whether the API or an MCP server is live.',
+    description: 'Report whether the Penpot HTTP API is configured. Call it when a Penpot tool fails.',
     parameters: {},
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backend: { type: 'string', required: true, description: 'api or mcp.' },
+          backend: { type: 'string', required: true, description: 'api, or none when not configured.' },
           label: { type: 'string', required: true, description: 'Human-readable endpoint, e.g. "api http://host:8090".' },
         },
       },
       render: (_args, value) => [{ type: 'text', text: `${value.backend} — ${value.label}` }],
     },
     async execute() {
-      return { backend: backend.kind, label: backend.label }
+      return backend === undefined
+        ? { backend: 'none', label: 'not configured (PENPOT_API_URL / PENPOT_ACCESS_TOKEN)' }
+        : { backend: requireBackend().kind, label: requireBackend().label }
     },
   }))
 
@@ -92,7 +80,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backend: { type: 'string', required: true, description: 'Which backend answered: api or mcp.' },
+          backend: { type: 'string', required: true, description: 'Which backend answered: api.' },
           items: {
             type: 'array',
             required: true,
@@ -111,7 +99,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute() {
-      return { backend: backend.kind, items: await backend.listTeams() }
+      return { backend: requireBackend().kind, items: await requireBackend().listTeams() }
     },
   }))
 
@@ -126,7 +114,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backend: { type: 'string', required: true, description: 'Which backend answered: api or mcp.' },
+          backend: { type: 'string', required: true, description: 'Which backend answered: api.' },
           items: {
             type: 'array',
             required: true,
@@ -145,7 +133,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute(args) {
-      return { backend: backend.kind, items: await backend.listProjects(args.teamId) }
+      return { backend: requireBackend().kind, items: await requireBackend().listProjects(args.teamId) }
     },
   }))
 
@@ -160,7 +148,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backend: { type: 'string', required: true, description: 'Which backend answered: api or mcp.' },
+          backend: { type: 'string', required: true, description: 'Which backend answered: api.' },
           items: {
             type: 'array',
             required: true,
@@ -179,7 +167,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute(args) {
-      return { backend: backend.kind, items: await backend.listFiles(args.projectId) }
+      return { backend: requireBackend().kind, items: await requireBackend().listFiles(args.projectId) }
     },
   }))
 
@@ -194,7 +182,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backend: { type: 'string', required: true, description: 'Which backend answered: api or mcp.' },
+          backend: { type: 'string', required: true, description: 'Which backend answered: api.' },
           items: {
             type: 'array',
             required: true,
@@ -213,7 +201,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute(args) {
-      return { backend: backend.kind, items: await backend.searchFiles(args.query) }
+      return { backend: requireBackend().kind, items: await requireBackend().searchFiles(args.query) }
     },
   }))
 
@@ -228,7 +216,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backend: { type: 'string', required: true, description: 'api or mcp.' },
+          backend: { type: 'string', required: true, description: 'api, or none when not configured.' },
           file: {
             type: 'object',
             required: true,
@@ -243,8 +231,8 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: `${value.file.id}\t${value.file.name} (${value.backend})` }],
     },
     async execute(args) {
-      const summary = await backend.fileSummary(args.fileId)
-      return { backend: backend.kind, file: { id: summary.id, name: summary.name } }
+      const summary = await requireBackend().fileSummary(args.fileId)
+      return { backend: requireBackend().kind, file: { id: summary.id, name: summary.name } }
     },
   }))
 
@@ -267,7 +255,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: `${value.path} (${String(value.bytes)} bytes)` }],
     },
     async execute(args) {
-      const bytes = await backend.exportFile(args.fileId)
+      const bytes = await requireBackend().exportFile(args.fileId)
       const { writeFile } = await import('node:fs/promises')
       await writeFile(args.path, bytes)
       return { path: args.path, bytes: bytes.byteLength }

@@ -1,12 +1,15 @@
 # dsh-penpot-plugin
 
 Penpot for [DeepSeek Harness](https://github.com/deepseek-ai): list, search,
-inspect and export design files from a DSH agent, with an optional MCP backend
-when one is already running.
+inspect and export design files from a DSH agent over Penpot's local HTTP API.
 
-`0.1` is deliberately read + export. Writing designs needs Penpot's
+`0.2` is deliberately read + export. Writing designs needs Penpot's
 `update-file` change format; the design questions are in
 [docs/DESIGN.md](docs/DESIGN.md).
+
+There is no MCP backend. The setup runs a local Penpot instance and talks to it
+over `/api/rpc/command/*` with an access token; a second transport added a
+read-only path that could not export, so it was removed in 0.2.0.
 
 ## Install
 
@@ -16,7 +19,7 @@ The setup's optional design component installs Penpot, the `penpot` CLI and this
 plugin together, with the plugin ref pinned in `components.json`:
 
 ```sh
-./install.sh --design docker       # or add it later: /system components -> Enable
+./install.sh --design penpot       # or add it later: /system components -> Enable
 ```
 
 That path is self-contained: it writes `PENPOT_API_URL` and
@@ -35,7 +38,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile web add github:vladtsvirko/dsh-penpot-plugin#v0.1.0
+dsh plugin --profile web add github:vladtsvirko/dsh-penpot-plugin#v0.2.0
 ```
 
 Restart the runtime after adding it. The row reads its credentials from the
@@ -47,16 +50,16 @@ export PENPOT_API_URL='http://192.168.2.50:8090'   # no /api/rpc suffix needed
 export PENPOT_ACCESS_TOKEN='...'                    # Penpot: Settings -> Access tokens
 ```
 
-In the Docker setup that means adding both to `.env` and recreating the
-container (`docker compose up -d dsh`); the design component does it for you.
-Ask the agent for `penpot_status` to verify: it names the live backend and
-endpoint, and a missing variable is reported by name.
+In the DSH setup that means adding both to `.env` and restarting
+`dsh.service`; the design component does it for you. Ask the agent for
+`penpot_status` to verify: it names the endpoint, and a missing variable is
+reported by name.
 
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `penpot_status` | which backend is live (`api` or `mcp`) |
+| `penpot_status` | whether the API is configured, and its endpoint |
 | `penpot_teams` | teams the account can see |
 | `penpot_projects` | projects, optionally per team |
 | `penpot_files` | files in a project |
@@ -69,23 +72,22 @@ tools, then import it back through the API (the `penpot` CLI in
 [dsh-tg-docker-setup](https://github.com/vladtsvirko/dsh-tg-docker-setup) does the
 import half today; a plugin tool is the obvious next step).
 
-## Backends
+## Backend
 
-- **api** — talks to Penpot's HTTP RPC with an access token. Always available
-  with `PENPOT_API_URL` + `PENPOT_ACCESS_TOKEN`.
-- **mcp** — delegates to an MCP server already registered in the runtime
-  (`mcp__<server>__*`, as `@deepseek-ai/dsh-mcp-client` provides). Read-only:
-  export and import are refused rather than faked.
-- `backend: auto` (default) prefers MCP when its tools are registered, otherwise
-  the API.
+One backend: Penpot's HTTP RPC.
+
+- `POST /api/rpc/command/<name>` with `Authorization: Token …`, kebab-case
+  payloads (`get-teams`, `get-all-projects`, `get-files`, `search-files`,
+  `get-file-summary`, `export-binfile`, `import-binfile`).
+- Configuration is `apiUrl` + `token`; both come from the environment in the
+  setup's managed row. If either is empty the plugin still loads, and
+  `penpot_status` says `none` while the other tools explain what to set.
 
 ```yaml
 - id: dsh-penpot
   config:
     apiUrl: http://192.168.2.50:8090
     token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ''
-    backend: auto
-    mcpServer: penpot
 ```
 
 ## Compatibility
@@ -93,7 +95,3 @@ import half today; a plugin tool is the obvious next step).
 Plugin versions are independent of DSH and of the setup release. Each release
 states the DSH range and the Penpot versions it was tested against in
 [COMPATIBILITY.md](COMPATIBILITY.md).
-
-## License
-
-MIT.

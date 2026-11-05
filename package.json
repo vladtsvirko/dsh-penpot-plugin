@@ -1,6 +1,6 @@
 {
   "name": "dsh-penpot-plugin",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Penpot for DeepSeek Harness \u2014 read, export and import design files from a DSH agent, with an API backend and an optional MCP backend.",
   "type": "module",
   "main": "lib/index.js",
