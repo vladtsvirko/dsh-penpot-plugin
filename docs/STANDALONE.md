@@ -11,22 +11,23 @@ environment. None of that is required by the plugin.
 | DSH matching the range in [COMPATIBILITY.md](../COMPATIBILITY.md) | the tool registry API |
 | A reachable Penpot instance (2.x) | the HTTP RPC backend |
 | A Penpot access token | Settings → Access tokens |
-| Node 22 and pnpm | the bundle's `prepare` build |
+| Node 22 and pnpm | `dsh plugin`; source installs also need the build script |
 
 ## Install
 
 ```sh
-# 1. Add the tagged bundle to the profile. This initialises the profile if needed.
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.3.0
+# Published package: the tarball already contains lib/, so no build script.
+dsh plugin --profile penpot add dsh-penpot-plugin@0.3.0
 ```
 
-pnpm 10+ blocks the package's `prepare` script and prints the exact
-`allowBuilds` key. Add that line to the profile's `pnpm-workspace.yaml` and run
-the command again:
+From the source repository instead, allow the build and pin the tag:
 
 ```yaml
 allowBuilds:
   dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
+```
+```sh
+dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.3.0
 ```
 
 The bundle's own patch inserts the `dsh-penpot` row and reads both values from
@@ -52,7 +53,7 @@ loads, so a missing token never takes the runtime down.
 
 ```sh
 dsh plugin --profile penpot remove dsh-penpot-plugin
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v<new>
+dsh plugin --profile penpot add dsh-penpot-plugin@<new>
 ```
 
 The host's plugin manager refuses to install a git package over an installed

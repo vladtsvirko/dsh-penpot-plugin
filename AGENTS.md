@@ -13,6 +13,9 @@ together with `dsh-tg-docker-setup` or `dsh-telegram-connector`.
   a release.
 - Credentials never go in `cordis.patch.yml`; the row reads them from the
   environment.
+- Every tag is a release: `.github/workflows/publish.yml` publishes that exact
+  version to npm with provenance. The workflow needs the repository secret
+  `NPM_TOKEN` with publish rights.
 
 ## Repository metadata
 
@@ -24,7 +27,10 @@ API's `PUT /repos/{owner}/{repo}/topics` are the two ways to set them.
 
 ## Release checklist
 
-1. `npm run typecheck && npm test && npm run build`.
+1. `npm run typecheck && npm test && npm run build` and `npm publish --dry-run`.
 2. Update `package.json`, `package-lock.json`, `CHANGELOG.md` and the
    `COMPATIBILITY.md` row.
-3. Commit, tag `v<version>`, push. CI runs `scripts/check-version.mjs`.
+3. Commit, tag `v<version>`, push. CI validates the tag, and `publish.yml`
+   uploads that exact version to npm.
+4. After the npm version exists, optionally bump the setup's `plugins.json`
+   `spec`/`fallback`/`minimum`.
