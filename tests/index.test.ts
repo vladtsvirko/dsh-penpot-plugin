@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createServer, type Server } from 'node:http'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { apply, inject } from '../src/index.js'
 
 interface RegisteredTool {
@@ -11,6 +15,32 @@ function register(config: { apiUrl?: string; token?: string } = {}): Map<string,
   const tools = new Map<string, RegisteredTool>()
   apply({ tools: { register: (tool: RegisteredTool) => tools.set(tool.name, tool) } } as never, config)
   return tools
+}
+
+let server: Server | undefined
+afterEach(async () => {
+  await new Promise<void>((resolve) => {
+    if (server === undefined) resolve()
+    else server.close(() => resolve())
+  })
+  server = undefined
+})
+
+/** Start a fake Penpot RPC endpoint and return its base URL plus the calls. */
+async function fakePenpot(handler: (url: string, body: string, response: import('node:http').ServerResponse) => void): Promise<{ base: string; calls: Array<{ url: string; body: string }> }> {
+  const calls: Array<{ url: string; body: string }> = []
+  server = createServer((request, response) => {
+    let body = ''
+    request.on('data', (chunk) => { body += chunk.toString('latin1') })
+    request.on('end', () => {
+      calls.push({ url: request.url ?? '', body })
+      handler(request.url ?? '', body, response)
+    })
+  })
+  await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('no port')
+  return { base: `http://127.0.0.1:${address.port}`, calls }
 }
 
 describe('plugin surface', () => {
@@ -51,5 +81,31 @@ describe('plugin surface', () => {
     await expect(register().get('penpot_import')?.execute({ path: '/tmp/x.penpot' })).rejects.toThrow(
       'penpot_import needs a projectId for a new file, or a fileId to replace one',
     )
+  })
+
+  it('imports a .penpot file through the configured backend', async () => {
+    const { base, calls } = await fakePenpot((_url, _body, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ id: 'file-imported' }))
+    })
+    const tools = register({ apiUrl: base, token: 'tok' })
+    const dir = await mkdtemp(join(tmpdir(), 'penpot-tool-'))
+    try {
+      const file = join(dir, 'design.penpot')
+      await writeFile(file, 'zipbytes')
+      const result = await tools.get('penpot_import')?.execute({
+        path: file,
+        projectId: 'project-1',
+        name: 'Imported design',
+      })
+      expect(result).toEqual({ id: 'file-imported' })
+      expect(calls[0]?.url).toBe('/api/rpc/command/import-binfile')
+      expect(calls[0]?.body).toContain('name="project-id"')
+      expect(calls[0]?.body).toContain('name="name"')
+      expect(calls[0]?.body).toContain('filename="design.penpot"')
+      expect(await readFile(file, 'utf8')).toBe('zipbytes')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
