@@ -39,8 +39,9 @@ host.
    `mod-obj`, `del-obj`) against its shape model. The pragmatic path is
    shape-by-shape: text first, then fill, then geometry, each with a Penpot
    version row in the matrix.
-2. **Import.** The `penpot_export` counterpart. The multipart shape is known
-   (see the setup CLI) and unverified against a real instance.
+2. **Import.** Implemented in 0.3.0 as `penpot_import` (multipart
+   `import-binfile`). The shape is covered by a fake server; a real instance
+   run is still the release gate for the compatibility row.
 3. **Resources.** A file could be exposed as a DSH resource rather than fetched
    through a tool; depends on what DSH's resource surface wants.
 

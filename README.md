@@ -26,11 +26,22 @@ That path is self-contained: it writes `PENPOT_API_URL` and
 `PENPOT_ACCESS_TOKEN` into the runtime environment, installs the pinned plugin
 and mounts a managed `dsh-penpot` row. Nothing below is needed.
 
-### Into any other runtime
+### Standalone (any DSH runtime)
 
-Pin a tag and allow the package's build, or pnpm ≥ 10 refuses to run `prepare`
-and the install aborts before any code exists. pnpm prints the exact
-`allowBuilds` key; add it to the profile's `pnpm-workspace.yaml` and retry:
+See [docs/STANDALONE.md](docs/STANDALONE.md) for the complete walkthrough.
+
+The plugin is a normal DSH bundle: it works in any profile, with or without the
+setup. It needs a Penpot instance and an access token, nothing else from this
+project. It is published to npm as an exact version:
+
+```sh
+dsh plugin --profile web add dsh-penpot-plugin@0.3.0
+```
+
+The registry tarball contains the built `lib/`, so there is no `prepare` build
+and no `allowBuilds` entry. Restart the runtime after adding it.
+
+From the source repository instead, allow the build and pin the tag:
 
 ```yaml
 allowBuilds:
@@ -38,10 +49,9 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile web add github:vladtsvirko/dsh-penpot-plugin#v0.2.0
+dsh plugin --profile web add github:vladtsvirko/dsh-penpot-plugin#v0.3.0
 ```
-
-Restart the runtime after adding it. The row reads its credentials from the
+ The row reads its credentials from the
 environment of the **runtime process** — exporting them in a shell later does
 not reach a running runtime:
 
@@ -66,11 +76,11 @@ reported by name.
 | `penpot_search` | files by name or term |
 | `penpot_file` | one file: id, name, pages |
 | `penpot_export` | write a `.penpot` file to disk |
+| `penpot_import` | upload a `.penpot` file as a new or replacement file |
 
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file
-tools, then import it back through the API (the `penpot` CLI in
-[dsh-tg-docker-setup](https://github.com/vladtsvirko/dsh-tg-docker-setup) does the
-import half today; a plugin tool is the obvious next step).
+tools, then import it back with `penpot_import` — no setup CLI and no second
+toolchain. A new file needs `projectId`; replacing one needs `fileId`.
 
 ## Backend
 
@@ -90,8 +100,26 @@ One backend: Penpot's HTTP RPC.
     token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ''
 ```
 
+## Updating
+
+Plugin versions are independent of DSH and of the setup release.
+
+- **In the setup:** `/system update penpot` in the bot (or `/system update
+  plugin dsh-penpot-plugin`) resolves the newest version, opens a rollback trial,
+  and replaces the bundle through the host's plugin manager.
+- **Standalone:** `dsh plugin --profile <name> remove dsh-penpot-plugin`, then
+  `add` the new tag. The plugin manager cannot install over an already-installed
+  git package, so it is two steps; restart the runtime when it reports
+  `restart-required`.
+
+The `dsh-penpot` row's configuration is preserved across an update; only the
+package moves.
+
 ## Compatibility
 
 Plugin versions are independent of DSH and of the setup release. Each release
 states the DSH range and the Penpot versions it was tested against in
-[COMPATIBILITY.md](COMPATIBILITY.md).
+[COMPATIBILITY.md](COMPATIBILITY.md). The setup pins an exact npm spec in
+`plugins.json`; a newer compatible version installed from the bot stays
+installed across reboots, and the GitHub tag of the same release is the
+registry-unreachable fallback.

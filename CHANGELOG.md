@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.0
+
+- **npm distribution.** The package is published as
+  `dsh-penpot-plugin@<version>`; the registry tarball contains `lib/`, so
+  installs no longer run a build script. The release workflow publishes a tag
+  with provenance. The setup pins this npm spec and keeps the GitHub tag as a
+  fallback.
+- **`penpot_import`.** The export counterpart is now a tool: upload a `.penpot`
+  file as a new file (`projectId`) or replace an existing one (`fileId`). The
+  backend already had the multipart `import-binfile` call; the setup CLI was the
+  only caller.
+- **Bundle patch corrected.** `cordis.patch.yml` still passed `backend: auto`
+  and `mcpServer`, which 0.2.0 removed. The row now declares only `apiUrl` and
+  `token`, so a standalone install no longer starts with a stale config key.
+- **Builds clean before packaging.** `lib/` is removed before every build, so
+  compiled files from removed modules (the old MCP backend) can never enter a
+  tarball.
+- **The package description no longer claims an MCP backend.** It was stale
+  since 0.2.0 and is the text GitHub and npm show.
+- **Standalone is documented as a first-class path** (`docs/STANDALONE.md`): no
+  setup, no managed row, same tools. The setup remains the convenience wrapper,
+  not a requirement.
+- **Load fix.** The plugin used `ctx.tools` without declaring
+  `inject = ['tools']`; Cordis refuses that property, so a standalone profile
+  failed at load with `cannot get property "tools" without inject`. The setup
+  masked it only while the plugin happened not to be mounted. Declared now.
+- Tool-surface tests cover the service declaration, the always-registered set,
+  the unconfigured status, and the import destination check.
+
 ## 0.2.0
 
 - **MCP backend removed.** The plugin talks to Penpot's local HTTP RPC only.

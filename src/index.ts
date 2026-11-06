@@ -18,6 +18,10 @@ import { createApiBackend } from './api-backend.js'
 import type { PenpotBackend, PenpotRef } from './backend.js'
 
 export const name = 'dsh-penpot'
+// `ctx.tools` is a declared service: Cordis refuses the property without an
+// injection declaration, even when the profile has the service mounted. This is
+// what makes the plugin load in a plain profile, not only beside the setup.
+export const inject = ['tools']
 
 export const Config = Schema.object({
   apiUrl: Schema.string().default(''),
@@ -259,6 +263,42 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       const { writeFile } = await import('node:fs/promises')
       await writeFile(args.path, bytes)
       return { path: args.path, bytes: bytes.byteLength }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_import',
+    description: 'Import a .penpot file (a zip of Penpot JSON) as a new file in a project, or replace an existing file. Use penpot_export to produce the input.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Absolute path of the .penpot file to upload.' },
+      projectId: { type: 'string', description: 'Target project uuid from penpot_projects. Required unless fileId is given.' },
+      fileId: { type: 'string', description: 'Existing file uuid to replace. Omit to create a new file.' },
+      name: { type: 'string', description: 'Display name for a new file. Ignored when fileId is given.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', required: true, description: 'Penpot uuid of the imported file.' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `imported ${value.id}` }],
+    },
+    async execute(args) {
+      if ((args.projectId === undefined || args.projectId.length === 0)
+        && (args.fileId === undefined || args.fileId.length === 0)) {
+        throw new Error('penpot_import needs a projectId for a new file, or a fileId to replace one')
+      }
+      const result = await requireBackend().importFile({
+        path: args.path,
+        ...(args.projectId === undefined ? {} : { projectId: args.projectId }),
+        ...(args.fileId === undefined ? {} : { fileId: args.fileId }),
+        ...(args.name === undefined ? {} : { name: args.name }),
+      })
+      // Penpot's import answers the new file id. A backend that cannot report
+      // one has still done the import, so name what is known rather than lie.
+      return { id: result.id ?? 'unknown (Penpot did not return a file id)' }
     },
   }))
 }
