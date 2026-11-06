@@ -14,8 +14,10 @@ together with `dsh-tg-docker-setup` or `dsh-telegram-connector`.
 - Credentials never go in `cordis.patch.yml`; the row reads them from the
   environment.
 - Every tag is a release: `.github/workflows/publish.yml` publishes that exact
-  version to npm with provenance. The workflow needs the repository secret
-  `NPM_TOKEN` with publish rights.
+  version to npm with provenance. Authentication is npm Trusted Publishing
+  (GitHub OIDC); no npm token is stored in the repository. The npm package must
+  have a trusted publisher configured for `vladtsvirko/dsh-penpot-plugin` and
+  `publish.yml`.
 
 ## Repository metadata
 
@@ -31,6 +33,8 @@ API's `PUT /repos/{owner}/{repo}/topics` are the two ways to set them.
 2. Update `package.json`, `package-lock.json`, `CHANGELOG.md` and the
    `COMPATIBILITY.md` row.
 3. Commit, tag `v<version>`, push. CI validates the tag, and `publish.yml`
-   uploads that exact version to npm.
+   uploads that exact version to npm through the trusted publisher. The first
+   version of a new package is published manually once, because npm only lets
+   you configure a trusted publisher after the package exists.
 4. After the npm version exists, optionally bump the setup's `plugins.json`
    `spec`/`fallback`/`minimum`.
