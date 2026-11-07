@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.1
+
+- **Reads ask for JSON.** Penpot answers transit unless the request sends
+  `Accept: application/json`; without it every list came back as transit and
+  parsed into empty refs (`penpot_teams` showed `{"id":"","name":""}`). Every
+  RPC request now sends the header.
+- **`penpot_export` reads Penpot's real response.** `export-binfile` is an SSE
+  stream that ends with the URL of the exported zip; the plugin treated the
+  stream itself as the file and wrote `event: progress` text as a `.penpot`.
+  It now parses the stream, downloads the URL and returns the zip bytes.
+- **`penpot_import` reads Penpot's real response.** `import-binfile` is also
+  SSE and ends with the id(s) of the imported file(s); the plugin called
+  `.json()` and failed after a successful import. It now parses the stream and
+  returns the file id.
+- **`penpot_search` sends the team.** Penpot's `search-files` requires a
+  `team-id`; the tool takes an optional `teamId` and otherwise searches the
+  first team the account can see.
+- SSE event data is transit-encoded (`~:` keys, `~u` uuids); a small normalizer
+  handles both markers so errors and ids are readable without a transit
+  dependency.
+
 ## 0.3.0
 
 - **npm distribution.** The package is published as

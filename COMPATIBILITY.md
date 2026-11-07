@@ -6,6 +6,7 @@ releases; every row states what was actually exercised.
 
 | Plugin | DSH | Penpot | Status | Notes |
 |---|---|---|---|---|
+| 0.3.1 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live instance: teams/projects/search/import/export exercised | fixes the JSON accept header, the SSE export/import responses and the required `team-id` on search |
 | 0.3.0 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | API import covered by a fake server; live instance run is the release gate | adds `penpot_import`; bundle patch drops the removed `backend`/`mcpServer` keys; standalone install documented |
 | 0.2.0 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | API exercised against a live self-hosted instance | API only: the optional MCP backend and `backend`/`mcpServer` config were removed; the plugin now loads unconfigured and `penpot_status` says `none` |
 | 0.1.2 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18 | untested against a live instance | docs only: `/system components` after the setup rename; same code as 0.1.1 |

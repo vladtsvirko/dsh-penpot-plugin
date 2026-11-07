@@ -37,7 +37,7 @@ export interface PenpotBackend {
   listTeams(): Promise<PenpotRef[]>
   listProjects(teamId?: string): Promise<PenpotRef[]>
   listFiles(projectId: string): Promise<PenpotRef[]>
-  searchFiles(term: string): Promise<PenpotRef[]>
+  searchFiles(teamId: string, term: string): Promise<PenpotRef[]>
   fileSummary(fileId: string): Promise<PenpotFileSummary>
   /** Whole-file export as `.penpot` bytes. */
   exportFile(fileId: string): Promise<Uint8Array>

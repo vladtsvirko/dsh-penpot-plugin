@@ -177,9 +177,10 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
 
   ctx.tools.register(defineTool({
     name: 'penpot_search',
-    description: 'Search Penpot design files by name or content term.',
+    description: 'Search Penpot design files by name or content term. Penpot searches within one team, so pass teamId or let the first team be used.',
     parameters: {
       query: { type: 'string', required: true, description: 'Search term.' },
+      teamId: { type: 'string', description: 'Team uuid from penpot_teams; defaults to the first team.' },
     },
     output: {
       schema: {
@@ -205,7 +206,12 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute(args) {
-      return { backend: requireBackend().kind, items: await requireBackend().searchFiles(args.query) }
+      const backend = requireBackend()
+      const teamId = args.teamId ?? (await backend.listTeams())[0]?.id
+      if (teamId === undefined || teamId.length === 0) {
+        throw new Error('no Penpot team found — create one in Penpot before searching')
+      }
+      return { backend: backend.kind, items: await backend.searchFiles(teamId, args.query) }
     },
   }))
 

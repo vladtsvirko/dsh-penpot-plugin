@@ -85,8 +85,8 @@ describe('plugin surface', () => {
 
   it('imports a .penpot file through the configured backend', async () => {
     const { base, calls } = await fakePenpot((_url, _body, response) => {
-      response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({ id: 'file-imported' }))
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.end('event: end\ndata: ["~u00000000-0000-0000-0000-00000000f11e"]\n\n')
     })
     const tools = register({ apiUrl: base, token: 'tok' })
     const dir = await mkdtemp(join(tmpdir(), 'penpot-tool-'))
@@ -98,7 +98,7 @@ describe('plugin surface', () => {
         projectId: 'project-1',
         name: 'Imported design',
       })
-      expect(result).toEqual({ id: 'file-imported' })
+      expect(result).toEqual({ id: '00000000-0000-0000-0000-00000000f11e' })
       expect(calls[0]?.url).toBe('/api/rpc/command/import-binfile')
       expect(calls[0]?.body).toContain('name="project-id"')
       expect(calls[0]?.body).toContain('name="name"')

@@ -39,10 +39,70 @@ const asRefs = (value: unknown): PenpotRef[] => {
     .map((item) => ({ id: String(item['id'] ?? ''), name: String(item['name'] ?? '') }))
 }
 
+/**
+ * Penpot's export/import endpoints answer as Server-Sent Events, and the event
+ * data is transit-encoded even when the request asked for JSON. The only
+ * markers these endpoints emit are `~:` (keyword key) and `~u` (uuid), so a
+ * small normalizer is enough and avoids a transit dependency.
+ */
+const decodeTransit = (value: unknown): unknown => {
+  if (typeof value === 'string') {
+    if (value.startsWith('~u')) return value.slice(2)
+    if (value.startsWith('~:')) return value.slice(2)
+    return value
+  }
+  if (Array.isArray(value)) return value.map(decodeTransit)
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key.startsWith('~:') ? key.slice(2) : key, decodeTransit(item)]),
+    )
+  }
+  return value
+}
+
+/** Read an SSE body into `{ event, data }` records, ignoring comments. */
+export const readSse = async (response: Response): Promise<Array<{ event: string; data: unknown }>> => {
+  const text = await response.text()
+  const events: Array<{ event: string; data: unknown }> = []
+  for (const block of text.split(/\r?\n\r?\n/)) {
+    let event = 'message'
+    const data: string[] = []
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith('event:')) event = line.slice(6).trim()
+      else if (line.startsWith('data:')) data.push(line.slice(5).trim())
+    }
+    if (data.length === 0) continue
+    const raw = data.join('\n')
+    let parsed: unknown = raw
+    try {
+      parsed = decodeTransit(JSON.parse(raw))
+    } catch {
+      // A non-JSON payload stays a string; the caller decides what it means.
+    }
+    events.push({ event, data: parsed })
+  }
+  return events
+}
+
+/** The payload of the last `end` event, or undefined when the stream had none. */
+const lastEnd = (events: Array<{ event: string; data: unknown }>): unknown => {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index]?.event === 'end') return events[index]?.data
+  }
+  return undefined
+}
+
+const failOnErrorEvent = (events: Array<{ event: string; data: unknown }>): void => {
+  const error = events.find((item) => item.event === 'error')
+  if (error !== undefined) {
+    throw new PenpotApiError(200, JSON.stringify(error.data).slice(0, 300))
+  }
+}
+
 export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
   const base = normalizeBase(options.apiUrl)
   const fetchImpl = options.fetchImpl ?? globalThis.fetch
-  const headers = { authorization: `Token ${options.token}` }
+  const headers = { authorization: `Token ${options.token}`, accept: 'application/json' }
 
   const rpc = async (command: string, body: Record<string, unknown> = {}): Promise<Response> => {
     const response = await fetchImpl(`${base}/api/rpc/command/${command}`, {
@@ -74,8 +134,8 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
       return asRefs(await (await rpc('get-project-files', { 'project-id': projectId })).json())
     },
 
-    async searchFiles(term) {
-      return asRefs(await (await rpc('search-files', { 'search-term': term })).json())
+    async searchFiles(teamId, term) {
+      return asRefs(await (await rpc('search-files', { 'team-id': teamId, 'search-term': term })).json())
     },
 
     async fileSummary(fileId) {
@@ -85,8 +145,23 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
     },
 
     async exportFile(fileId) {
-      const response = await rpc('export-binfile', { fileId, includeLibraries: false, embedAssets: true })
-      return new Uint8Array(await response.arrayBuffer())
+      // `export-binfile` streams SSE and ends with the URL of the exported zip.
+      const response = await rpc('export-binfile', {
+        'file-id': fileId,
+        'include-libraries': false,
+        'embed-assets': true,
+      })
+      const events = await readSse(response)
+      failOnErrorEvent(events)
+      const url = lastEnd(events)
+      if (typeof url !== 'string' || url.length === 0) {
+        throw new PenpotApiError(response.status, 'the export finished without a download URL')
+      }
+      const download = await fetchImpl(url)
+      if (!download.ok) {
+        throw new PenpotApiError(download.status, `the export download failed (${String(download.status)})`)
+      }
+      return new Uint8Array(await download.arrayBuffer())
     },
 
     async importFile({ path, projectId, fileId, name }) {
@@ -101,8 +176,12 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
         const text = await response.text().catch(() => '')
         throw new PenpotApiError(response.status, text.slice(0, 300).trim())
       }
-      const raw = await response.json() as Record<string, unknown>
-      return { id: raw['id'] === undefined ? undefined : String(raw['id']), raw }
+      // The stream ends with the id(s) of the imported file(s).
+      const events = await readSse(response)
+      failOnErrorEvent(events)
+      const result = lastEnd(events)
+      const first = Array.isArray(result) ? result[0] : result
+      return { id: typeof first === 'string' && first.length > 0 ? first : undefined, raw: events }
     },
   }
 }
