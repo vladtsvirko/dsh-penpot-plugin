@@ -19,12 +19,27 @@ The setup's optional design component installs Penpot, the `penpot` CLI and this
 plugin together, with the plugin ref pinned in `components.json`:
 
 ```sh
-./install.sh --design penpot       # or add it later: /system components -> Enable
+./setup.sh install --design penpot    # or add it later: /components -> Enable
 ```
 
 That path is self-contained: it writes `PENPOT_API_URL` and
 `PENPOT_ACCESS_TOKEN` into the runtime environment, installs the pinned plugin
 and mounts a managed `dsh-penpot` row. Nothing below is needed.
+
+### Configure in the UI
+
+On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and press
+**Configure** on the `dsh-penpot` row. Set:
+
+- **API URL** — the Penpot origin, for example `http://192.168.2.98:8090`
+  (no `/api/rpc` suffix; `https://…:8443` works when the CA is trusted).
+- **Access token** — create it in Penpot → Settings → Access tokens.
+
+**Save** writes the row's config into the profile's user layer; the plugin
+recomposes with it. The managed setup's row still falls back to
+`PENPOT_API_URL`/`PENPOT_ACCESS_TOKEN` in the runtime environment, and the UI
+values override them. Without the UI (older DSH or a headless profile), use the
+environment or the `cordis.patch.yml` row as described below.
 
 ### Standalone (any DSH runtime)
 
@@ -35,7 +50,7 @@ setup. It needs a Penpot instance and an access token, nothing else from this
 project. It is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile web add dsh-penpot-plugin@0.3.0
+dsh plugin --profile web add dsh-penpot-plugin@0.4.0
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build

@@ -17,7 +17,7 @@ environment. None of that is required by the plugin.
 
 ```sh
 # Published package: the tarball already contains lib/, so no build script.
-dsh plugin --profile penpot add dsh-penpot-plugin@0.3.0
+dsh plugin --profile penpot add dsh-penpot-plugin@0.4.0
 ```
 
 From the source repository instead, allow the build and pin the tag:
@@ -27,11 +27,16 @@ allowBuilds:
   dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
 ```
 ```sh
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.3.0
+dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.0
 ```
 
-The bundle's own patch inserts the `dsh-penpot` row and reads both values from
-the runtime environment, so there is no configuration file to edit:
+The bundle's own patch inserts the `dsh-penpot` row. On DSH `0.2.1-rc.5` or
+newer, configure it in the UI: **Plugins** → **dsh-penpot-plugin** →
+**Configure**, set the API URL and the access token, **Save**. The page writes
+the row's config; nothing to export.
+
+For an older DSH or a headless profile, the row reads both values from the
+runtime environment:
 
 ```sh
 export PENPOT_API_URL='http://192.168.2.50:8090'   # /api/rpc suffix is optional
@@ -40,7 +45,8 @@ dsh --profile penpot
 ```
 
 Export the variables in the environment that starts the runtime. A shell export
-made after the runtime is already running does not reach it.
+made after the runtime is already running does not reach it. The UI values
+override the environment.
 
 ## Verify
 
@@ -66,9 +72,9 @@ and the row are exactly the same.
 
 | Setup feature | Standalone equivalent |
 |---|---|
-| `install.sh --design penpot` installs Penpot and the token | run Penpot yourself |
+| `setup.sh install --design penpot` installs Penpot and the token | run Penpot yourself |
 | managed `dsh-penpot` row in `cordis.patch.yml` | the bundle's own insert row |
-| `/system components` enable/disable | `dsh plugin … add/remove` |
+| `setup.sh components enable/disable design` | `dsh plugin … add/remove` |
 | `/system update penpot` with a trial | the two `dsh plugin` commands above |
 | `/system rollback` | keep the previous tag; re-add it |
 

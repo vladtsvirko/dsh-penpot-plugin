@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- **The plugin has a configuration page.** On DSH `0.2.1-rc.5` or newer, the
+  Plugins page shows **Configure** on the `dsh-penpot` row: two fields, API URL
+  and access token, saved through the page's own form. No environment export,
+  `launchctl setenv` or profile patch is needed on a desktop install. The
+  managed setup's env values remain the fallback and are overridden by the UI.
+- The browser half is plain JavaScript in the client-module format, copied to
+  `lib/client.js` by the build; the host half is unchanged.
+
 ## 0.3.1
 
 - **Reads ask for JSON.** Penpot answers transit unless the request sends
