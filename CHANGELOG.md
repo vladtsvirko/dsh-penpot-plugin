@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.3
+
+- **The published package could not load its host row.** The plugin imports
+  `@deepseek-ai/schemastery` for its row `Config`, but `package.json` never
+  declared it. A profile install failed before any tool registered with
+  `ERR_MODULE_NOT_FOUND: Cannot find package '@deepseek-ai/schemastery'`, so
+  the row had no live fiber and **Configure** never opened. It is now a
+  runtime dependency (`~3.19.0`), and `Config` is annotated for portable
+  declarations.
+- The 0.4.2 browser-half fixes are included: the row config entry injects
+  `@deepseek-ai/dsh-client-ui-plugin-manager`, and the form keeps one hook
+  order while the configuration snapshot loads.
+- The docs cleanup from 0.4.2 is unchanged.
+
 ## 0.4.2
 
 - **The Plugins page can configure the row.** The browser half declared

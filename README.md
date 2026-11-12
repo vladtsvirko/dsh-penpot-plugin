@@ -17,7 +17,7 @@ through Penpot's `update-file` change format is the open design question; see
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.2
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.3
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -32,7 +32,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.2
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.3
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.

@@ -23,7 +23,7 @@ export const name = 'dsh-penpot'
 // what makes the plugin load in a plain profile.
 export const inject = ['tools']
 
-export const Config = Schema.object({
+export const Config: Schema<PenpotPluginConfig> = Schema.object({
   apiUrl: Schema.string().default(''),
   token: Schema.string().default(''),
 })

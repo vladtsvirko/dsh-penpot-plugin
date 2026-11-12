@@ -6,7 +6,8 @@ releases; every row states what was actually exercised.
 
 | Plugin | DSH | Penpot | Status | Notes |
 |---|---|---|---|---|
-| 0.4.2 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | client entry fix targeted at DSH 0.2.2-rc.2; slot registration and save payload covered by tests | fixes the non-existent client inject package and the form hook order; docs cleanup |
+| 0.4.3 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | host row active on DSH 0.2.2-rc.2; client config entry covered by tests | declares `@deepseek-ai/schemastery` (`~3.19.0`) so the row starts; includes the 0.4.2 client inject and hook fixes |
+| 0.4.2 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | client entry fix targeted at DSH 0.2.2-rc.2; slot registration and save payload covered by tests | fixes the non-existent client inject package and the form hook order; docs cleanup; host row could not start because `@deepseek-ai/schemastery` was undeclared |
 | 0.4.1 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | docs only; same code as 0.4.0 | rewrote the README and guides for standalone use |
 | 0.4.0 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | config page loads on DSH 0.2.1-rc.5 (Plugins → Configure); host API unchanged | adds a browser half (`plugins.row.config`) with API URL and token fields |
 | 0.3.1 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live instance: teams/projects/search/import/export exercised | fixes the JSON accept header, the SSE export/import responses and the required `team-id` on search |
