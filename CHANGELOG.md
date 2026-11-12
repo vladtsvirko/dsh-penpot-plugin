@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.6
+
+- **Export understands Penpot 2.18's end event.** `export-binfile` ends with
+  `{"~#uri": "…"}`; the transit normalizer only knew `~:` and `~u`, so
+  `penpot_export` reported that the stream had no download URL. It now decodes
+  `~#` keys and values and accepts the `uri` field, as well as the old plain
+  string form.
+- **Same-origin export downloads send the token.** Penpot serves the export
+  from `/assets/by-id/…`, which requires the access token. A presigned URL on
+  another origin still receives no token.
+- **The Save button stays visible in both themes.** It now uses the theme's
+  surface and primary label colors instead of white text on the brand fill,
+  which could disappear.
+- Note: the export URL is only downloadable when the Penpot public origin
+  proxies `/assets/by-id/` to the backend. The deployment used for this release
+  returns an nginx 404 for that path; that is a proxy configuration gap, not
+  the plugin.
+
 ## 0.4.5
 
 - **The row config form follows the DSH UI.** It now uses the current

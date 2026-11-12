@@ -46,12 +46,16 @@ const decodeTransit = (value: unknown): unknown => {
   if (typeof value === 'string') {
     if (value.startsWith('~u')) return value.slice(2)
     if (value.startsWith('~:')) return value.slice(2)
+    if (value.startsWith('~#')) return value.slice(2)
     return value
   }
   if (Array.isArray(value)) return value.map(decodeTransit)
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key.startsWith('~:') ? key.slice(2) : key, decodeTransit(item)]),
+      Object.entries(value).map(([key, item]) => [
+        key.startsWith('~:') || key.startsWith('~#') ? key.slice(2) : key,
+        decodeTransit(item),
+      ]),
     )
   }
   return value
@@ -85,6 +89,23 @@ export const readSse = async (response: Response): Promise<Array<{ event: string
 const lastEnd = (events: Array<{ event: string; data: unknown }>): unknown => {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     if (events[index]?.event === 'end') return events[index]?.data
+  }
+  return undefined
+}
+
+/**
+ * The export end event is a plain URL in older Penpot builds and
+ * `{"~#uri": "…"}` (decoded to `{ uri }`) in 2.18. Accept both, and the
+ * undecoded key as a fallback.
+ */
+const exportUrl = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.length > 0) return value
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    for (const key of ['uri', '~#uri']) {
+      const candidate = record[key]
+      if (typeof candidate === 'string' && candidate.length > 0) return candidate
+    }
   }
   return undefined
 }
@@ -150,11 +171,15 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
       })
       const events = await readSse(response)
       failOnErrorEvent(events)
-      const url = lastEnd(events)
-      if (typeof url !== 'string' || url.length === 0) {
+      const url = exportUrl(lastEnd(events))
+      if (url === undefined) {
         throw new PenpotApiError(response.status, 'the export finished without a download URL')
       }
-      const download = await fetchImpl(url)
+      const target = new URL(url, `${base}/`)
+      // Penpot serves the export from its own /assets route, which requires the
+      // token. A presigned third-party URL must not receive that token.
+      const sameOrigin = target.origin === new URL(base).origin
+      const download = await fetchImpl(target.toString(), sameOrigin ? { headers } : undefined)
       if (!download.ok) {
         throw new PenpotApiError(download.status, `the export download failed (${String(download.status)})`)
       }

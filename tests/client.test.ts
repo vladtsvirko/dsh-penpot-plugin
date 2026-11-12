@@ -167,6 +167,7 @@ describe('penpot config page', () => {
 
     const button = findAll(tree, 'button')[0]
     expect(button?.props.disabled).toBe(false)
+    expect(button?.children).toContain('Save')
     await (button?.props.onClick as () => Promise<void>)()
     expect(calls).toEqual([{
       ops: [

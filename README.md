@@ -17,7 +17,7 @@ through Penpot's `update-file` change format is the open design question; see
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.5
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.6
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -32,7 +32,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.5
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.6
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -86,6 +86,10 @@ names the endpoint, and a missing value is reported by name.
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file
 tools, then import it back with `penpot_import` — no extra CLI and no second
 toolchain. A new file needs `projectId`; replacing one needs `fileId`.
+
+Penpot returns the export as an `/assets/by-id/…` URL. The public origin must
+proxy that path to the backend; a reverse proxy that serves `/assets` only as
+static frontend files answers 404.
 
 ## Backend
 

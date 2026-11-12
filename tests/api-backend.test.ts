@@ -90,7 +90,7 @@ describe('api backend', () => {
           'data: {"~:section":"~:file"}',
           '',
           'event: end',
-          `data: ${JSON.stringify(downloadUrl)}`,
+          `data: ${JSON.stringify({ '~#uri': downloadUrl })}`,
           '',
         ].join('\n'))
         return

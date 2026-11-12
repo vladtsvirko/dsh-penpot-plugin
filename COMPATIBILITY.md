@@ -6,6 +6,7 @@ releases; every row states what was actually exercised.
 
 | Plugin | DSH | Penpot | Status | Notes |
 |---|---|---|---|---|
+| 0.4.6 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | export end event and same-origin auth fixed; the test origin answers nginx 404 for `/assets/by-id/` | decodes `~#uri`; sends the token on same-origin downloads; Save button contrast; public origin must proxy `/assets/by-id` |
 | 0.4.5 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | row config form uses DSH theme tokens and shows saved state on DSH 0.2.2-rc.2 | UI-only follow-up to 0.4.4; no host or Penpot RPC changes |
 | 0.4.4 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | volatile row config exposed on DSH 0.2.2-rc.2; Configure form covered by client tests | makes `apiUrl`/`token` volatile so the settings namespace and form appear; values apply live |
 | 0.4.3 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | host row active on DSH 0.2.2-rc.2; client config entry covered by tests | declares `@deepseek-ai/schemastery` (`~3.19.0`) so the row starts; includes the 0.4.2 client inject and hook fixes |

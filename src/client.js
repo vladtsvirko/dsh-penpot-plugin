@@ -37,8 +37,9 @@ window.__ModuleLoader__.load({
 .dsh-penpot-form .input:focus { outline: 1px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
 .dsh-penpot-form .input:disabled { opacity: 0.6; }
 .dsh-penpot-form .actions { display: flex; align-items: center; gap: 10px; }
-.dsh-penpot-form .primary { min-height: 32px; padding: 0 14px; border: 1px solid transparent; border-radius: 6px; background: var(--dsw-alias-brand-primary); color: #fff; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
-.dsh-penpot-form .primary:disabled { opacity: 0.5; cursor: default; }
+.dsh-penpot-form .primary { min-height: 32px; padding: 0 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.dsh-penpot-form .primary:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2); }
+.dsh-penpot-form .primary:disabled { opacity: 0.55; cursor: default; }
 .dsh-penpot-form .message { color: var(--dsw-alias-label-secondary); font-size: 12px; }
 `
 
@@ -168,7 +169,25 @@ window.__ModuleLoader__.load({
           { className: 'actions' },
           h(
             'button',
-            { type: 'button', className: 'primary', disabled, onClick: save },
+            {
+              type: 'button',
+              className: 'primary',
+              disabled,
+              onClick: save,
+              style: {
+                minHeight: 32,
+                padding: '0 14px',
+                borderRadius: 6,
+                border: '1px solid var(--dsw-alias-border-l2)',
+                background: 'var(--dsw-alias-bg-layer-1)',
+                color: 'var(--dsw-alias-label-primary)',
+                font: 'inherit',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: disabled ? 'default' : 'pointer',
+                opacity: disabled ? 0.55 : 1,
+              },
+            },
             saving ? 'Saving…' : 'Save',
           ),
           message.length === 0 ? null : h('span', { className: 'message' }, message),
