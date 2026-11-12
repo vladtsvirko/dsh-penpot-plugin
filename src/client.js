@@ -8,9 +8,9 @@
  * it to lib/client.js), so it can read React from the shared module table and
  * keep the form small.
  *
- * The host half (src/index.ts) reads the same two keys from its config; the
- * page writes them into the profile's user layer, so the next recompose sees
- * them.
+ * The host half (src/index.ts) reads the same two volatile keys from its config;
+ * the page writes them into the profile's user layer, so the next tool call sees
+ * them without a restart.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-penpot-plugin',
@@ -23,24 +23,32 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const KEY = 'dsh-penpot-plugin#dsh-penpot'
-    const inputStyle = {
-      boxSizing: 'border-box',
-      width: '100%',
-      padding: '6px 8px',
-      borderRadius: 6,
-      border: '1px solid var(--dsh-border, #d0d5dd)',
-      background: 'var(--dsh-surface, #fff)',
-      color: 'inherit',
-      font: 'inherit',
-    }
+    const styles = `
+.dsh-penpot-form { display: flex; flex-direction: column; gap: 16px; max-width: 560px; color: var(--dsw-alias-label-primary); font-size: 13px; }
+.dsh-penpot-form .panel { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; background: var(--dsw-alias-bg-layer-2); }
+.dsh-penpot-form .row { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.dsh-penpot-form .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-state-idle-primary); }
+.dsh-penpot-form .dot.ok { background: var(--dsw-alias-state-success-primary); }
+.dsh-penpot-form .muted { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.45; }
+.dsh-penpot-form .field { display: flex; flex-direction: column; gap: 6px; }
+.dsh-penpot-form .label { font-weight: 500; }
+.dsh-penpot-form .hint { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.4; }
+.dsh-penpot-form .input { box-sizing: border-box; width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
+.dsh-penpot-form .input:focus { outline: 1px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.dsh-penpot-form .input:disabled { opacity: 0.6; }
+.dsh-penpot-form .actions { display: flex; align-items: center; gap: 10px; }
+.dsh-penpot-form .primary { min-height: 32px; padding: 0 14px; border: 1px solid transparent; border-radius: 6px; background: var(--dsw-alias-brand-primary); color: #fff; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.dsh-penpot-form .primary:disabled { opacity: 0.5; cursor: default; }
+.dsh-penpot-form .message { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+`
 
-    function field(label, hint, input) {
+    function Field({ label, hint, children }) {
       return h(
         'label',
-        { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 } },
-        h('span', { style: { fontWeight: 600 } }, label),
-        hint === undefined ? null : h('span', { style: { opacity: 0.7, fontSize: 12 } }, hint),
-        input,
+        { className: 'field' },
+        h('span', { className: 'label' }, label),
+        hint === undefined ? null : h('span', { className: 'hint' }, hint),
+        children,
       )
     }
 
@@ -73,6 +81,11 @@ window.__ModuleLoader__.load({
         return h('p', null, 'Loading the current values…')
       }
 
+      const savedUrl = String(value.apiUrl ?? '')
+      const savedToken = String(value.token ?? '')
+      const urlSet = savedUrl.trim().length > 0
+      const tokenSet = savedToken.trim().length > 0
+      const configured = urlSet && tokenSet
       const disabled = !state.writable || saving
       const save = async () => {
         setSaving(true)
@@ -85,7 +98,14 @@ window.__ModuleLoader__.load({
             ],
             state.revision,
           )
-          setMessage(ok ? 'Saved.' : 'The runtime did not accept these values; they were left for you to correct.')
+          const incomplete = apiUrl.trim().length === 0 || token.trim().length === 0
+          if (!ok) {
+            setMessage('The runtime did not accept these values; they were left for you to correct.')
+          } else if (incomplete) {
+            setMessage('Saved. Set both the API URL and token to enable the tools.')
+          } else {
+            setMessage('Saved.')
+          }
         } catch (error) {
           setMessage(`Save failed: ${String(error)}`)
         } finally {
@@ -95,62 +115,76 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        null,
+        { className: 'dsh-penpot-form' },
+        h('style', null, styles),
         h(
-          'p',
-          null,
-          'Point the Penpot tools at a Penpot instance. The API origin is the published frontend, without an /api/rpc suffix.',
+          'div',
+          { className: 'panel' },
+          h(
+            'div',
+            { className: 'row' },
+            h('span', { className: configured ? 'dot ok' : 'dot' }),
+            h('span', null, configured ? 'Configured' : 'Not configured yet'),
+          ),
+          h(
+            'div',
+            { className: 'muted' },
+            `API URL ${urlSet ? 'set' : 'not set'} · Access token ${tokenSet ? 'set' : 'not set'}`,
+          ),
+          h('div', { className: 'muted' }, 'Changes are saved to this profile and apply immediately.'),
         ),
-        field(
-          'API URL',
-          'For example http://localhost:8090. The HTTPS origin on :8443 also works if the CA is trusted.',
+        h(
+          Field,
+          {
+            label: 'API URL',
+            hint: 'For example http://yourpenpot.url. Include the port if your Penpot runs on one; no /api/rpc suffix.',
+          },
           h('input', {
             type: 'url',
+            className: 'input',
             value: apiUrl,
             disabled,
-            placeholder: 'http://192.168.2.98:8090',
-            style: inputStyle,
+            placeholder: 'http://yourpenpot.url',
             onChange: (event) => setApiUrl(event.target.value),
           }),
         ),
-        field(
-          'Access token',
-          'Create it in Penpot → Settings → Access tokens.',
+        h(
+          Field,
+          {
+            label: 'Access token',
+            hint: 'Create one in Penpot → Settings → Access tokens. A saved token is shown masked.',
+          },
           h('input', {
             type: 'password',
+            className: 'input',
             value: token,
             disabled,
-            placeholder: 'the token from the Penpot instance',
-            style: inputStyle,
+            placeholder: 'Paste the access token',
             onChange: (event) => setToken(event.target.value),
           }),
         ),
         h(
           'div',
-          { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+          { className: 'actions' },
           h(
             'button',
-            {
-              type: 'button',
-              disabled,
-              onClick: save,
-              style: { padding: '6px 14px', borderRadius: 6, cursor: disabled ? 'default' : 'pointer' },
-            },
+            { type: 'button', className: 'primary', disabled, onClick: save },
             saving ? 'Saving…' : 'Save',
           ),
-          message.length === 0 ? null : h('span', { style: { fontSize: 13 } }, message),
+          message.length === 0 ? null : h('span', { className: 'message' }, message),
         ),
       )
     }
 
     const inject = ['slots']
     function apply(ctx) {
-      ctx.slots.inject('plugins.row.config', () =>
-        ctx.slots.register(
+      ctx.slots.inject('plugins.row.config', () => {
+        const dispose = ctx.slots.register(
           { name: 'plugins.row.config', key: KEY },
           ({ view, form }) => (view === 'summary' ? null : h(PenpotConfigForm, { form })),
-        ),
-      )
+        )
+        return dispose
+      })
     }
 
     exports.NS = 'dsh-penpot'

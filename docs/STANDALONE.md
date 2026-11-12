@@ -18,7 +18,7 @@ runtime it is installed into.
 
 ```sh
 # Published package: the tarball already contains lib/, so no build script.
-dsh plugin --profile penpot add dsh-penpot-plugin@0.4.4
+dsh plugin --profile penpot add dsh-penpot-plugin@0.4.5
 ```
 
 From the source repository instead, allow the build and pin the tag:
@@ -28,7 +28,7 @@ allowBuilds:
   dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
 ```
 ```sh
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.4
+dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.5
 ```
 
 The bundle's own patch inserts the `dsh-penpot` row. On DSH `0.2.1-rc.5` or
@@ -40,7 +40,7 @@ For an older DSH or a headless profile, the row reads both values from the
 runtime environment:
 
 ```sh
-export PENPOT_API_URL='http://localhost:8090'   # /api/rpc suffix is optional
+export PENPOT_API_URL='http://yourpenpot.url'   # /api/rpc suffix is optional
 export PENPOT_ACCESS_TOKEN='...'
 dsh --profile penpot
 ```

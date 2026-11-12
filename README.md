@@ -17,7 +17,7 @@ through Penpot's `update-file` change format is the open design question; see
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.4
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.5
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -32,7 +32,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.4
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.5
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -42,8 +42,9 @@ The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
 On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and press
 **Configure** on the `dsh-penpot` row. Set:
 
-- **API URL** — the Penpot origin, for example `http://localhost:8090`
-  (no `/api/rpc` suffix; `https://…:8443` works when the CA is trusted).
+- **API URL** — the Penpot origin, for example `http://yourpenpot.url`
+  (include the port if your instance uses one; no `/api/rpc` suffix;
+  `https://…:8443` works when the CA is trusted).
 - **Access token** — create it in Penpot → Settings → Access tokens.
 
 **Save** writes the row's config into the profile's user layer; the URL and
@@ -53,7 +54,7 @@ Without the UI (an older DSH or a headless profile), the row reads the runtime
 process environment:
 
 ```sh
-export PENPOT_API_URL='http://localhost:8090'      # no /api/rpc suffix needed
+export PENPOT_API_URL='http://yourpenpot.url'      # no /api/rpc suffix needed
 export PENPOT_ACCESS_TOKEN='...'                   # Penpot: Settings -> Access tokens
 ```
 
@@ -62,7 +63,7 @@ The row's `config` also accepts the two values directly:
 ```yaml
 - id: dsh-penpot
   config:
-    apiUrl: http://localhost:8090
+    apiUrl: http://yourpenpot.url
     token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ''
 ```
 

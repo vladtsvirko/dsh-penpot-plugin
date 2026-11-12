@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.5
+
+- **The row config form follows the DSH UI.** It now uses the current
+  `--dsw-alias-*` theme tokens and standard input/button sizing instead of the
+  old `--dsh-*` fallbacks, so it reads as part of the Plugins page in both
+  themes.
+- **Saved state is explicit.** A status panel says whether the API URL and
+  access token are set, names the missing one, and notes that changes save to
+  the profile and apply immediately. The token stays masked.
+- The API URL hint is now `http://yourpenpot.url` instead of a real-looking
+  localhost value; the field still accepts a port and no `/api/rpc` suffix.
+- Saving an incomplete pair reports that both values are needed to enable the
+  tools.
+
 ## 0.4.4
 
 - **The row config page now shows the form.** DSH's settings surface only
