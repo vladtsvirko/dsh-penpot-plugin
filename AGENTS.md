@@ -22,9 +22,9 @@ This repository is a DSH plugin, versioned on its own.
 
 The upstream DSH README asks plugin repositories to carry the GitHub topic
 `dsh-plugin` (the About box, not a file). Keep it set, along with
-`deepseek-harness` and the product topic (`telegram` or `penpot`). Topics need
-repository administration rights; `gh repo edit --add-topic dsh-plugin` or the
-API's `PUT /repos/{owner}/{repo}/topics` are the two ways to set them.
+`deepseek-harness` and `penpot`. Topics need repository administration rights;
+`gh repo edit --add-topic dsh-plugin` or the API's
+`PUT /repos/{owner}/{repo}/topics` are the two ways to set them.
 
 ## Release checklist
 

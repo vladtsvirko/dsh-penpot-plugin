@@ -9,15 +9,16 @@ runtime it is installed into.
 | What | Why |
 |---|---|
 | DSH matching the range in [COMPATIBILITY.md](../COMPATIBILITY.md) | the tool registry API |
-| A reachable Penpot instance (2.x) | the HTTP RPC backend |
+| A reachable Penpot instance (2.18.x; 2.18.6 tested) | the HTTP RPC backend |
 | A Penpot access token | Settings → Access tokens |
-| Node 22 and pnpm | `dsh plugin`; source installs also need the build script |
+| Node 22 | the plugin's engine requirement |
+| pnpm | `dsh plugin` forwards package operations to it |
 
 ## Install
 
 ```sh
 # Published package: the tarball already contains lib/, so no build script.
-dsh plugin --profile penpot add dsh-penpot-plugin@0.4.1
+dsh plugin --profile penpot add dsh-penpot-plugin@0.4.2
 ```
 
 From the source repository instead, allow the build and pin the tag:
@@ -27,19 +28,19 @@ allowBuilds:
   dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
 ```
 ```sh
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.1
+dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.2
 ```
 
 The bundle's own patch inserts the `dsh-penpot` row. On DSH `0.2.1-rc.5` or
 newer, configure it in the UI: **Plugins** → **dsh-penpot-plugin** →
 **Configure**, set the API URL and the access token, **Save**. The page writes
-the row's config; nothing to export.
+the row's config; no environment export is needed.
 
 For an older DSH or a headless profile, the row reads both values from the
 runtime environment:
 
 ```sh
-export PENPOT_API_URL='http://192.168.2.50:8090'   # /api/rpc suffix is optional
+export PENPOT_API_URL='http://localhost:8090'   # /api/rpc suffix is optional
 export PENPOT_ACCESS_TOKEN='...'
 dsh --profile penpot
 ```

@@ -5,11 +5,11 @@ inspect, export and import design files from a DSH agent over Penpot's HTTP RPC
 API.
 
 The plugin is a normal DSH bundle. It talks to a Penpot instance you run
-(2.18.x is the tested line) and needs an API origin and an access token; nothing
-else.
+(2.18.6 is the tested version) and needs an API origin and an access token;
+nothing else.
 
-`0.2` is deliberately read + export + import. Writing designs through Penpot's
-`update-file` change format is the open design question; see
+The tool surface is deliberately read + export + import. Writing designs
+through Penpot's `update-file` change format is the open design question; see
 [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Install
@@ -17,7 +17,7 @@ else.
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.1
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.2
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -32,7 +32,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.1
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.2
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -42,7 +42,7 @@ The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
 On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and press
 **Configure** on the `dsh-penpot` row. Set:
 
-- **API URL** — the Penpot origin, for example `http://192.168.2.98:8090`
+- **API URL** — the Penpot origin, for example `http://localhost:8090`
   (no `/api/rpc` suffix; `https://…:8443` works when the CA is trusted).
 - **Access token** — create it in Penpot → Settings → Access tokens.
 
@@ -53,8 +53,8 @@ Without the UI (an older DSH or a headless profile), the row reads the runtime
 process environment:
 
 ```sh
-export PENPOT_API_URL='http://192.168.2.50:8090'   # no /api/rpc suffix needed
-export PENPOT_ACCESS_TOKEN='...'                    # Penpot: Settings -> Access tokens
+export PENPOT_API_URL='http://localhost:8090'      # no /api/rpc suffix needed
+export PENPOT_ACCESS_TOKEN='...'                   # Penpot: Settings -> Access tokens
 ```
 
 The row's `config` also accepts the two values directly:
@@ -62,7 +62,7 @@ The row's `config` also accepts the two values directly:
 ```yaml
 - id: dsh-penpot
   config:
-    apiUrl: http://192.168.2.50:8090
+    apiUrl: http://localhost:8090
     token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ''
 ```
 
@@ -78,7 +78,7 @@ names the endpoint, and a missing value is reported by name.
 | `penpot_projects` | projects, optionally per team |
 | `penpot_files` | files in a project |
 | `penpot_search` | files by name or term |
-| `penpot_file` | one file: id, name, pages |
+| `penpot_file` | one file: id and name |
 | `penpot_export` | write a `.penpot` file to disk |
 | `penpot_import` | upload a `.penpot` file as a new or replacement file |
 
@@ -91,8 +91,9 @@ toolchain. A new file needs `projectId`; replacing one needs `fileId`.
 One backend: Penpot's HTTP RPC.
 
 - `POST /api/rpc/command/<name>` with `Authorization: Token …`, kebab-case
-  payloads (`get-teams`, `get-all-projects`, `get-files`, `search-files`,
-  `get-file-summary`, `export-binfile`, `import-binfile`).
+  payloads (`get-teams`, `get-all-projects`/`get-projects`,
+  `get-project-files`, `search-files`, `get-file-summary`, `export-binfile`,
+  `import-binfile`).
 - Configuration is `apiUrl` + `token`. If either is empty the plugin still
   loads, and `penpot_status` says `none` while the other tools explain what to
   set.

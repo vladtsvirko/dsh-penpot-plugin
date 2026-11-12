@@ -5,9 +5,9 @@
  * small interface so the model-facing tools stay independent of the transport
  * details (and of future changes to them).
  *
- * Write operations are deliberately absent from v0.1: Penpot's `update-file`
- * needs its change format, and the read/export/import set is the part that can
- * be proven first.
+ * Write operations are deliberately absent: Penpot's `update-file` needs its
+ * change format, and the read/export/import set is the part that can be proven
+ * first.
  *
  * @module dsh-penpot-plugin/backend
  */
@@ -30,9 +30,9 @@ export interface PenpotFileSummary {
 
 /** What a backend must provide. Every method throws on refusal. */
 export interface PenpotBackend {
-  /** Which implementation is live; surfaced by the status tool and `/system status`-style checks. */
+  /** Backend kind; surfaced by the status tool. */
   readonly kind: 'api'
-  /** Short human label, e.g. `api http://192.168.2.50:8090`. */
+  /** Short human label, e.g. `api http://localhost:8090`. */
   readonly label: string
   listTeams(): Promise<PenpotRef[]>
   listProjects(teamId?: string): Promise<PenpotRef[]>

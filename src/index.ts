@@ -5,8 +5,8 @@
  * one small stable tool surface. There is deliberately no MCP path; see
  * docs/DESIGN.md.
  *
- * v0.1 is read + export. Writing (Penpot's `update-file` change format) is the
- * open design question; see docs/DESIGN.md.
+ * The tool surface is read + export + import. Writing (Penpot's `update-file`
+ * change format) is the open design question; see docs/DESIGN.md.
  *
  * @module dsh-penpot-plugin
  */
@@ -217,7 +217,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
 
   ctx.tools.register(defineTool({
     name: 'penpot_file',
-    description: 'Show one design file: its id, name and pages. Use it to find the page ids an export or a future write needs.',
+    description: 'Show one design file: its id and name.',
     parameters: {
       fileId: { type: 'string', required: true, description: 'File uuid from penpot_files or penpot_search.' },
     },

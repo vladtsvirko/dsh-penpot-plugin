@@ -45,28 +45,33 @@ window.__ModuleLoader__.load({
     }
 
     function PenpotConfigForm({ form }) {
-      if (form === undefined) {
-        return h('p', null, 'This plugin does not expose its configuration in this build.')
-      }
-      const state = form.state
-      if (state.status === 'unavailable') {
-        return h('p', null, 'This plugin is not loaded, so it cannot be configured right now.')
-      }
-      if (state.status === 'loading') {
-        return h('p', null, 'Loading the current values…')
-      }
-      const value = state.value ?? {}
+      const state = form === undefined ? undefined : form.state
+      const value = (state === undefined ? undefined : state.value) ?? {}
       const [apiUrl, setApiUrl] = React.useState(String(value.apiUrl ?? ''))
       const [token, setToken] = React.useState(String(value.token ?? ''))
       const [saving, setSaving] = React.useState(false)
       const [message, setMessage] = React.useState('')
 
       // A new accepted snapshot (after a save, or a recompose) replaces the
-      // drafts; while the user is typing no snapshot changes.
+      // drafts; while the user is typing no snapshot changes. Every hook runs
+      // before the early returns below, so loading and unavailable renders keep
+      // the same hook order as the form itself.
+      const revision = state === undefined ? undefined : state.revision
       React.useEffect(() => {
-        setApiUrl(String((state.value ?? {}).apiUrl ?? ''))
-        setToken(String((state.value ?? {}).token ?? ''))
-      }, [state.revision])
+        const next = state === undefined ? {} : (state.value ?? {})
+        setApiUrl(String(next.apiUrl ?? ''))
+        setToken(String(next.token ?? ''))
+      }, [revision])
+
+      if (state === undefined) {
+        return h('p', null, 'This plugin does not expose its configuration in this build.')
+      }
+      if (state.status === 'unavailable') {
+        return h('p', null, 'This plugin is not loaded, so it cannot be configured right now.')
+      }
+      if (state.status === 'loading') {
+        return h('p', null, 'Loading the current values…')
+      }
 
       const disabled = !state.writable || saving
       const save = async () => {
@@ -80,7 +85,7 @@ window.__ModuleLoader__.load({
             ],
             state.revision,
           )
-          setMessage(ok ? 'Saved.' : 'The deployment did not accept these values; they were left for you to correct.')
+          setMessage(ok ? 'Saved.' : 'The runtime did not accept these values; they were left for you to correct.')
         } catch (error) {
           setMessage(`Save failed: ${String(error)}`)
         } finally {
@@ -98,7 +103,7 @@ window.__ModuleLoader__.load({
         ),
         field(
           'API URL',
-          'For example http://192.168.2.98:8090. The HTTPS origin on :8443 also works if the CA is trusted.',
+          'For example http://localhost:8090. The HTTPS origin on :8443 also works if the CA is trusted.',
           h('input', {
             type: 'url',
             value: apiUrl,

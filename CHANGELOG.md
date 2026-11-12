@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.2
+
+- **The Plugins page can configure the row.** The browser half declared
+  `dsh.client.inject` as `@deepseek-ai/dsh-client-ui-slots`, a package DSH does
+  not install, so the client entry never composed and the row showed no
+  **Configure** control. It now injects
+  `@deepseek-ai/dsh-client-ui-plugin-manager`, which owns
+  `plugins.row.config`.
+- **The form survives its loading state.** It returned before calling
+  `useState`/`useEffect` while the config snapshot loaded, so React saw a
+  changed hook order when the values arrived. Hooks now run on every render.
+- The form's example origin is `http://localhost:8090`, and a refused save says
+  the runtime did not accept the values.
+- Client tests cover the hook order and the exact `set` operations sent for the
+  API URL and token.
+- Docs cleanup: removed setup-era references (the `penpot` CLI, private IP
+  examples, `/system status`, a Telegram topic mention), corrected the RPC
+  command to `get-project-files`, stopped claiming `penpot_file` returns
+  pages, and state 2.18.6 as the tested Penpot version.
+- The Penpot RPC calls and tool behavior are unchanged.
+
 ## 0.4.1
 
 - Docs only: the README, the design notes and the standalone guide describe the
