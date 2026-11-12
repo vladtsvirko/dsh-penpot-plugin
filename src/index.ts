@@ -13,7 +13,7 @@
 
 import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { createApiBackend } from './api-backend.js'
 import type { PenpotBackend, PenpotRef } from './backend.js'
 
@@ -23,14 +23,19 @@ export const name = 'dsh-penpot'
 // what makes the plugin load in a plain profile.
 export const inject = ['tools']
 
-export const Config: Schema<PenpotPluginConfig> = Schema.object({
-  apiUrl: Schema.string().default(''),
-  token: Schema.string().default(''),
+export const Config: Schema<PenpotPluginConfigInput, PenpotPluginConfig> = Schema.object({
+  apiUrl: Schema.string().default('').volatile(),
+  token: Schema.string().default('').volatile(),
 })
 
-export interface PenpotPluginConfig {
+export interface PenpotPluginConfigInput {
   apiUrl?: string
   token?: string
+}
+
+export interface PenpotPluginConfig {
+  apiUrl: Volatile<string>
+  token: Volatile<string>
 }
 
 /** Render one list result: id and name per line, backend in parentheses. */
@@ -41,14 +46,19 @@ function describeRefs(value: { backend: string; items: readonly PenpotRef[] }): 
 }
 
 export function apply(ctx: Context, config: PenpotPluginConfig): void {
-  const configured = typeof config.apiUrl === 'string' && config.apiUrl.length > 0
-    && typeof config.token === 'string' && config.token.length > 0
-  const backend: PenpotBackend | undefined = configured
-    ? createApiBackend({ apiUrl: config.apiUrl as string, token: config.token as string })
-    : undefined
+  // Volatile fields update in place when the Plugins page saves them, so every
+  // tool call resolves the backend from the current values.
+  const currentBackend = (): PenpotBackend | undefined => {
+    const apiUrl = config.apiUrl.get()
+    const token = config.token.get()
+    return apiUrl.length > 0 && token.length > 0
+      ? createApiBackend({ apiUrl, token })
+      : undefined
+  }
   const requireBackend = (): PenpotBackend => {
+    const backend = currentBackend()
     if (backend === undefined) {
-      throw new Error('Penpot is not configured: set PENPOT_API_URL and PENPOT_ACCESS_TOKEN, then restart dsh')
+      throw new Error('Penpot is not configured: set the API URL and token on the Plugins page, or set PENPOT_API_URL and PENPOT_ACCESS_TOKEN')
     }
     return backend
   }
@@ -69,9 +79,10 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: `${value.backend} — ${value.label}` }],
     },
     async execute() {
+      const backend = currentBackend()
       return backend === undefined
         ? { backend: 'none', label: 'not configured (PENPOT_API_URL / PENPOT_ACCESS_TOKEN)' }
-        : { backend: requireBackend().kind, label: requireBackend().label }
+        : { backend: backend.kind, label: backend.label }
     },
   }))
 
@@ -103,7 +114,8 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute() {
-      return { backend: requireBackend().kind, items: await requireBackend().listTeams() }
+      const backend = requireBackend()
+      return { backend: backend.kind, items: await backend.listTeams() }
     },
   }))
 
@@ -137,7 +149,8 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute(args) {
-      return { backend: requireBackend().kind, items: await requireBackend().listProjects(args.teamId) }
+      const backend = requireBackend()
+      return { backend: backend.kind, items: await backend.listProjects(args.teamId) }
     },
   }))
 
@@ -171,7 +184,8 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: describeRefs(value) }],
     },
     async execute(args) {
-      return { backend: requireBackend().kind, items: await requireBackend().listFiles(args.projectId) }
+      const backend = requireBackend()
+      return { backend: backend.kind, items: await backend.listFiles(args.projectId) }
     },
   }))
 
@@ -241,8 +255,9 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: `${value.file.id}\t${value.file.name} (${value.backend})` }],
     },
     async execute(args) {
-      const summary = await requireBackend().fileSummary(args.fileId)
-      return { backend: requireBackend().kind, file: { id: summary.id, name: summary.name } }
+      const backend = requireBackend()
+      const summary = await backend.fileSummary(args.fileId)
+      return { backend: backend.kind, file: { id: summary.id, name: summary.name } }
     },
   }))
 
@@ -265,7 +280,8 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       render: (_args, value) => [{ type: 'text', text: `${value.path} (${String(value.bytes)} bytes)` }],
     },
     async execute(args) {
-      const bytes = await requireBackend().exportFile(args.fileId)
+      const backend = requireBackend()
+      const bytes = await backend.exportFile(args.fileId)
       const { writeFile } = await import('node:fs/promises')
       await writeFile(args.path, bytes)
       return { path: args.path, bytes: bytes.byteLength }
@@ -296,7 +312,8 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         && (args.fileId === undefined || args.fileId.length === 0)) {
         throw new Error('penpot_import needs a projectId for a new file, or a fileId to replace one')
       }
-      const result = await requireBackend().importFile({
+      const backend = requireBackend()
+      const result = await backend.importFile({
         path: args.path,
         ...(args.projectId === undefined ? {} : { projectId: args.projectId }),
         ...(args.fileId === undefined ? {} : { fileId: args.fileId }),

@@ -13,7 +13,10 @@ interface RegisteredTool {
 /** The plugin only needs ctx.tools.register; the rest of the host is irrelevant. */
 function register(config: { apiUrl?: string; token?: string } = {}): Map<string, RegisteredTool> {
   const tools = new Map<string, RegisteredTool>()
-  apply({ tools: { register: (tool: RegisteredTool) => tools.set(tool.name, tool) } } as never, config)
+  apply({ tools: { register: (tool: RegisteredTool) => tools.set(tool.name, tool) } } as never, {
+    apiUrl: { get: () => config.apiUrl ?? '' },
+    token: { get: () => config.token ?? '' },
+  } as never)
   return tools
 }
 
@@ -73,7 +76,7 @@ describe('plugin surface', () => {
 
   it('throws one readable error from a data tool when unconfigured', async () => {
     await expect(register().get('penpot_teams')?.execute({})).rejects.toThrow(
-      'Penpot is not configured: set PENPOT_API_URL and PENPOT_ACCESS_TOKEN, then restart dsh',
+      'Penpot is not configured: set the API URL and token on the Plugins page, or set PENPOT_API_URL and PENPOT_ACCESS_TOKEN',
     )
   })
 

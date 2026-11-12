@@ -64,7 +64,7 @@ window.__ModuleLoader__.load({
       }, [revision])
 
       if (state === undefined) {
-        return h('p', null, 'This plugin does not expose its configuration in this build.')
+        return h('p', null, 'Loading the configuration…')
       }
       if (state.status === 'unavailable') {
         return h('p', null, 'This plugin is not loaded, so it cannot be configured right now.')

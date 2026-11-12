@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.4
+
+- **The row config page now shows the form.** DSH's settings surface only
+  projects volatile Config fields. `apiUrl` and `token` were ordinary fields,
+  so the `dsh-penpot` settings namespace never appeared, the page passed no
+  form, and the row page reported that the plugin had no configuration. Both
+  fields are volatile now.
+- **Values apply without a restart.** Every tool call resolves the backend from
+  the current URL and token, so saving on the Plugins page takes effect
+  immediately.
+- The unconfigured error now points at the Plugins page first, with the
+  environment variables as the fallback.
+- While the form is loading, the page says so instead of claiming the plugin
+  exposes no configuration.
+- Host tool behavior and the Penpot RPC calls are unchanged.
+
 ## 0.4.3
 
 - **The published package could not load its host row.** The plugin imports

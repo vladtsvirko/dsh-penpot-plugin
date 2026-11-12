@@ -17,7 +17,7 @@ through Penpot's `update-file` change format is the open design question; see
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.3
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.4
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -32,7 +32,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.3
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.4
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -46,8 +46,8 @@ On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and pre
   (no `/api/rpc` suffix; `https://…:8443` works when the CA is trusted).
 - **Access token** — create it in Penpot → Settings → Access tokens.
 
-**Save** writes the row's config into the profile's user layer; the plugin
-recomposes with it.
+**Save** writes the row's config into the profile's user layer; the URL and
+token take effect on the next tool call.
 
 Without the UI (an older DSH or a headless profile), the row reads the runtime
 process environment:
