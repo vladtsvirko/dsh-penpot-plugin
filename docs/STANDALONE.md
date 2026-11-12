@@ -1,8 +1,8 @@
-# Standalone use
+# Use with any DSH runtime
 
-`dsh-penpot-plugin` is a normal DSH bundle. The setup's design component is a
-convenience: it installs Penpot, the `penpot` CLI and this plugin, and wires the
-environment. None of that is required by the plugin.
+`dsh-penpot-plugin` is a normal DSH bundle. It needs a Penpot instance and an
+access token; it has no other dependency and makes no assumption about the
+runtime it is installed into.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ environment. None of that is required by the plugin.
 
 ```sh
 # Published package: the tarball already contains lib/, so no build script.
-dsh plugin --profile penpot add dsh-penpot-plugin@0.4.0
+dsh plugin --profile penpot add dsh-penpot-plugin@0.4.1
 ```
 
 From the source repository instead, allow the build and pin the tag:
@@ -27,7 +27,7 @@ allowBuilds:
   dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
 ```
 ```sh
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.0
+dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.1
 ```
 
 The bundle's own patch inserts the `dsh-penpot` row. On DSH `0.2.1-rc.5` or
@@ -64,19 +64,4 @@ dsh plugin --profile penpot add dsh-penpot-plugin@<new>
 
 The host's plugin manager refuses to install a git package over an installed
 one, so removal comes first. Restart the runtime if the command reports
-`restart-required`. In a setup deployment the bot does this through the plugin
-manager and wraps it in a rollback trial (`/system update penpot`); the package
-and the row are exactly the same.
-
-## What the setup adds
-
-| Setup feature | Standalone equivalent |
-|---|---|
-| `setup.sh install --design penpot` installs Penpot and the token | run Penpot yourself |
-| managed `dsh-penpot` row in `cordis.patch.yml` | the bundle's own insert row |
-| `setup.sh components enable/disable design` | `dsh plugin … add/remove` |
-| `/system update penpot` with a trial | the two `dsh plugin` commands above |
-| `/system rollback` | keep the previous tag; re-add it |
-
-Nothing in the tool surface changes. The setup adds lifecycle and packaging, not
-capability.
+`restart-required`.

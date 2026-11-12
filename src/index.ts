@@ -3,7 +3,7 @@
  *
  * The plugin is a thin shell over Penpot's HTTP RPC API: one local backend,
  * one small stable tool surface. There is deliberately no MCP path; see
- * docs/DESIGN.md in the setup repository.
+ * docs/DESIGN.md.
  *
  * v0.1 is read + export. Writing (Penpot's `update-file` change format) is the
  * open design question; see docs/DESIGN.md.
@@ -20,7 +20,7 @@ import type { PenpotBackend, PenpotRef } from './backend.js'
 export const name = 'dsh-penpot'
 // `ctx.tools` is a declared service: Cordis refuses the property without an
 // injection declaration, even when the profile has the service mounted. This is
-// what makes the plugin load in a plain profile, not only beside the setup.
+// what makes the plugin load in a plain profile.
 export const inject = ['tools']
 
 export const Config = Schema.object({

@@ -13,7 +13,7 @@ surface the `penpot` CLI uses.
 ## Backend
 
 `POST /api/rpc/command/<name>` with `Authorization: Token …`, kebab-case
-payloads. Ported from the `penpot` CLI in the setup repo.
+payloads. Ported from the `penpot` CLI.
 
 - `get-teams`, `get-all-projects`/`get-projects`, `get-files`,
   `search-files`, `get-file-summary`, `export-binfile`, `import-binfile`.
@@ -30,8 +30,7 @@ added a configuration footgun (`backend: auto` would pick the read-only MCP and
 break `penpot_export`) and no capability. Removed in 0.2.0.
 
 The hosted `penpot.app` MCP is a remote service for Penpot's cloud account; it is
-not used by this local setup, and routing designs through it would leave the
-host.
+not used by this plugin, and routing designs through it would leave the host.
 
 ## Open questions (v0.2+)
 

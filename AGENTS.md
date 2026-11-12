@@ -1,7 +1,6 @@
 # Release rules
 
-This repository is a DSH plugin, versioned on its own — it is **not** released
-together with `dsh-tg-docker-setup` or `dsh-telegram-connector`.
+This repository is a DSH plugin, versioned on its own.
 
 - Semver: `0.x` is the compatible line; a breaking change is `1.0.0`.
 - Tags are `v` + `package.json` version, and immutable once pushed.
@@ -11,8 +10,8 @@ together with `dsh-tg-docker-setup` or `dsh-telegram-connector`.
 - Penpot's RPC is internal and moves between 2.x minors. A shape or command
   change is a compatibility event: test, then either widen the tested row or cut
   a release.
-- Credentials never go in `cordis.patch.yml`; the row reads them from the
-  environment.
+- Credentials are set from the Plugins page (the profile user layer) or from the
+  runtime environment; the patch's environment expressions are the fallback.
 - Every tag is a release: `.github/workflows/publish.yml` publishes that exact
   version to npm with provenance. Authentication is npm Trusted Publishing
   (GitHub OIDC); no npm token is stored in the repository. The npm package must
@@ -36,5 +35,5 @@ API's `PUT /repos/{owner}/{repo}/topics` are the two ways to set them.
    uploads that exact version to npm through the trusted publisher. The first
    version of a new package is published manually once, because npm only lets
    you configure a trusted publisher after the package exists.
-4. After the npm version exists, optionally bump the setup's `plugins.json`
-   `spec`/`fallback`/`minimum`.
+4. The npm version is the release; installations from the Plugins page pick it
+   up.

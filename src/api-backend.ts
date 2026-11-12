@@ -1,7 +1,7 @@
 /**
  * Direct HTTP backend: Penpot's own RPC, authenticated with an access token.
  *
- * This is a port of `design/penpot.mjs` from the dsh-tg-docker-setup CLI, kept
+ * This is a port of the `penpot` CLI, kept
  * here as a typed module so the plugin has no dependency on that repository.
  *
  * @module dsh-penpot-plugin/api-backend

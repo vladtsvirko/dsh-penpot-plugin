@@ -1,60 +1,28 @@
 # dsh-penpot-plugin
 
 Penpot for [DeepSeek Harness](https://github.com/deepseek-ai): list, search,
-inspect and export design files from a DSH agent over Penpot's local HTTP API.
+inspect, export and import design files from a DSH agent over Penpot's HTTP RPC
+API.
 
-`0.2` is deliberately read + export. Writing designs needs Penpot's
-`update-file` change format; the design questions are in
+The plugin is a normal DSH bundle. It talks to a Penpot instance you run
+(2.18.x is the tested line) and needs an API origin and an access token; nothing
+else.
+
+`0.2` is deliberately read + export + import. Writing designs through Penpot's
+`update-file` change format is the open design question; see
 [docs/DESIGN.md](docs/DESIGN.md).
-
-There is no MCP backend. The setup runs a local Penpot instance and talks to it
-over `/api/rpc/command/*` with an access token; a second transport added a
-read-only path that could not export, so it was removed in 0.2.0.
 
 ## Install
 
-### In the DSH setup (recommended)
-
-The setup's optional design component installs Penpot, the `penpot` CLI and this
-plugin together, with the plugin ref pinned in `components.json`:
+The plugin is published to npm as an exact version:
 
 ```sh
-./setup.sh install --design penpot    # or add it later: /components -> Enable
-```
-
-That path is self-contained: it writes `PENPOT_API_URL` and
-`PENPOT_ACCESS_TOKEN` into the runtime environment, installs the pinned plugin
-and mounts a managed `dsh-penpot` row. Nothing below is needed.
-
-### Configure in the UI
-
-On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and press
-**Configure** on the `dsh-penpot` row. Set:
-
-- **API URL** — the Penpot origin, for example `http://192.168.2.98:8090`
-  (no `/api/rpc` suffix; `https://…:8443` works when the CA is trusted).
-- **Access token** — create it in Penpot → Settings → Access tokens.
-
-**Save** writes the row's config into the profile's user layer; the plugin
-recomposes with it. The managed setup's row still falls back to
-`PENPOT_API_URL`/`PENPOT_ACCESS_TOKEN` in the runtime environment, and the UI
-values override them. Without the UI (older DSH or a headless profile), use the
-environment or the `cordis.patch.yml` row as described below.
-
-### Standalone (any DSH runtime)
-
-See [docs/STANDALONE.md](docs/STANDALONE.md) for the complete walkthrough.
-
-The plugin is a normal DSH bundle: it works in any profile, with or without the
-setup. It needs a Penpot instance and an access token, nothing else from this
-project. It is published to npm as an exact version:
-
-```sh
-dsh plugin --profile web add dsh-penpot-plugin@0.4.0
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.1
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
-and no `allowBuilds` entry. Restart the runtime after adding it.
+and no `allowBuilds` entry. Restart the runtime when the manager reports
+`restart-required`.
 
 From the source repository instead, allow the build and pin the tag:
 
@@ -64,21 +32,42 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile web add github:vladtsvirko/dsh-penpot-plugin#v0.3.0
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.1
 ```
- The row reads its credentials from the
-environment of the **runtime process** — exporting them in a shell later does
-not reach a running runtime:
+
+The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
+
+## Configure
+
+On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and press
+**Configure** on the `dsh-penpot` row. Set:
+
+- **API URL** — the Penpot origin, for example `http://192.168.2.98:8090`
+  (no `/api/rpc` suffix; `https://…:8443` works when the CA is trusted).
+- **Access token** — create it in Penpot → Settings → Access tokens.
+
+**Save** writes the row's config into the profile's user layer; the plugin
+recomposes with it.
+
+Without the UI (an older DSH or a headless profile), the row reads the runtime
+process environment:
 
 ```sh
 export PENPOT_API_URL='http://192.168.2.50:8090'   # no /api/rpc suffix needed
 export PENPOT_ACCESS_TOKEN='...'                    # Penpot: Settings -> Access tokens
 ```
 
-In the DSH setup that means adding both to `.env` and restarting
-`dsh.service`; the design component does it for you. Ask the agent for
-`penpot_status` to verify: it names the endpoint, and a missing variable is
-reported by name.
+The row's `config` also accepts the two values directly:
+
+```yaml
+- id: dsh-penpot
+  config:
+    apiUrl: http://192.168.2.50:8090
+    token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ''
+```
+
+The UI values override the environment. Ask the agent for `penpot_status`: it
+names the endpoint, and a missing value is reported by name.
 
 ## Tools
 
@@ -94,7 +83,7 @@ reported by name.
 | `penpot_import` | upload a `.penpot` file as a new or replacement file |
 
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file
-tools, then import it back with `penpot_import` — no setup CLI and no second
+tools, then import it back with `penpot_import` — no extra CLI and no second
 toolchain. A new file needs `projectId`; replacing one needs `fileId`.
 
 ## Backend
@@ -104,27 +93,18 @@ One backend: Penpot's HTTP RPC.
 - `POST /api/rpc/command/<name>` with `Authorization: Token …`, kebab-case
   payloads (`get-teams`, `get-all-projects`, `get-files`, `search-files`,
   `get-file-summary`, `export-binfile`, `import-binfile`).
-- Configuration is `apiUrl` + `token`; both come from the environment in the
-  setup's managed row. If either is empty the plugin still loads, and
-  `penpot_status` says `none` while the other tools explain what to set.
-
-```yaml
-- id: dsh-penpot
-  config:
-    apiUrl: http://192.168.2.50:8090
-    token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ''
-```
+- Configuration is `apiUrl` + `token`. If either is empty the plugin still
+  loads, and `penpot_status` says `none` while the other tools explain what to
+  set.
 
 ## Updating
 
-Plugin versions are independent of DSH and of the setup release.
+Plugin versions are independent of DSH.
 
-- **In the setup:** `/system update penpot` in the bot (or `/system update
-  plugin dsh-penpot-plugin`) resolves the newest version, opens a rollback trial,
-  and replaces the bundle through the host's plugin manager.
-- **Standalone:** `dsh plugin --profile <name> remove dsh-penpot-plugin`, then
-  `add` the new tag. The plugin manager cannot install over an already-installed
-  git package, so it is two steps; restart the runtime when it reports
+- From the **Plugins** page, update the bundle.
+- Or `dsh plugin --profile <name> remove dsh-penpot-plugin`, then add the new
+  version. The plugin manager cannot install over an already-installed git
+  package, so it is two steps; restart the runtime when it reports
   `restart-required`.
 
 The `dsh-penpot` row's configuration is preserved across an update; only the
@@ -132,9 +112,7 @@ package moves.
 
 ## Compatibility
 
-Plugin versions are independent of DSH and of the setup release. Each release
-states the DSH range and the Penpot versions it was tested against in
-[COMPATIBILITY.md](COMPATIBILITY.md). The setup pins an exact npm spec in
-`plugins.json`; a newer compatible version installed from the bot stays
-installed across reboots, and the GitHub tag of the same release is the
-registry-unreachable fallback.
+Plugin versions are independent of DSH. Each release states the DSH range and
+the Penpot versions it was tested against in
+[COMPATIBILITY.md](COMPATIBILITY.md). A newer compatible version installed from
+the Plugins page stays installed across reboots.
