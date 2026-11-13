@@ -1,23 +1,26 @@
 # dsh-penpot-plugin
 
-Penpot for [DeepSeek Harness](https://github.com/deepseek-ai): list, search,
-inspect, export and import design files from a DSH agent over Penpot's HTTP RPC
-API.
+Penpot for [DeepSeek Harness](https://github.com/deepseek-ai): discover and
+inspect design files, extract tokens, audit accessibility, read feedback, manage
+versions and files, and export or import `.penpot` archives over Penpot's HTTP
+RPC API.
 
 The plugin is a normal DSH bundle. It talks to a Penpot instance you run
 (2.18.6 is the tested version) and needs an API origin and an access token;
 nothing else.
 
-The tool surface is deliberately read + export + import. Writing designs
-through Penpot's `update-file` change format is the open design question; see
-[docs/DESIGN.md](docs/DESIGN.md).
+It also ships a **Penpot skill** (`skills/penpot/`) that the Host registers on
+`ctx.skills`, so the agent gets the workflow and the RPC/shape knowledge without
+a second install. Shape-level writes through Penpot's `update-file` format are
+not exposed as tools yet; the change format and safe recipes are in the skill's
+`references/write.md`.
 
 ## Install
 
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.4.6
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.5.0
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -32,7 +35,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.4.6
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.5.0
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -80,25 +83,69 @@ names the endpoint, and a missing value is reported by name.
 | `penpot_files` | files in a project |
 | `penpot_search` | files by name or term |
 | `penpot_file` | one file: id and name |
+| `penpot_pages` | pages and top-level frames, with sizes and layer counts |
+| `penpot_outline` | layer tree with bounds, fills, typography and text |
+| `penpot_find` | find layers by name or text |
+| `penpot_tokens` | token library + used colors/typography/radii; JSON or CSS |
+| `penpot_audit` | WCAG contrast, small text, overflow, empty frames, duplicate names |
+| `penpot_comments` | comment threads and replies |
+| `penpot_snapshots` | list or create file version snapshots |
+| `penpot_libraries` | linked design-system libraries |
+| `penpot_templates` | built-in Penpot templates |
+| `penpot_create_project` | create a project |
+| `penpot_create_file` | create an empty file |
+| `penpot_duplicate_file` | duplicate a file as a baseline |
+| `penpot_clone_template` | clone a built-in template into a project |
 | `penpot_export` | write a `.penpot` file to disk |
 | `penpot_import` | upload a `.penpot` file as a new or replacement file |
+
+The read tools are designed for large files: `penpot_outline`, `penpot_find`,
+`penpot_audit` and `penpot_tokens` accept a `pageId` and the outline accepts a
+`rootId` plus depth/shape limits. `penpot_pages` and `penpot_tokens` load the
+whole file: pages and the design-token library are file-level data.
+
+`penpot_tokens` reports both the file's design-token library (DTCG-style sets,
+themes, aliases) and the colors, typography and radii actually used on a page.
+`format: "css"` resolves Penpot math expressions such as `8*1.25` into usable
+`px` values.
 
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file
 tools, then import it back with `penpot_import` — no extra CLI and no second
 toolchain. A new file needs `projectId`; replacing one needs `fileId`.
+**Snapshot first** when the file matters.
 
 Penpot returns the export as an `/assets/by-id/…` URL. The public origin must
 proxy that path to the backend; a reverse proxy that serves `/assets` only as
-static frontend files answers 404.
+static frontend files answers 404. Object thumbnails are metadata ids and need
+the same proxy; per-frame PNG/SVG export is not part of the RPC API.
+
+## Skill
+
+`skills/penpot/SKILL.md` is registered automatically with the plugin's Host row.
+It routes the agent through discovery, outline, tokens, audit, comments,
+versioning and export/import, and carries the RPC and shape notes in
+`skills/penpot/references/`:
+
+- `rpc.md` — commands, params, SSE/transit, export/import;
+- `shapes.md` — shape/text data model, absolute coordinates, `positionData`;
+- `write.md` — `update-file` changes, geometry and text recipes;
+- `design-to-code.md` — mapping a frame to implementation;
+- `troubleshooting.md` — auth, 4xx/5xx, export proxy, revision conflicts.
+
+If the catalog does not show `penpot` after install, confirm the Host row is
+active and restart the Desktop app; client/Host compositions load at boot.
 
 ## Backend
 
 One backend: Penpot's HTTP RPC.
 
 - `POST /api/rpc/command/<name>` with `Authorization: Token …`, kebab-case
-  payloads (`get-teams`, `get-all-projects`/`get-projects`,
-  `get-project-files`, `search-files`, `get-file-summary`, `export-binfile`,
-  `import-binfile`).
+  payloads. Read: `get-teams`, `get-projects`/`get-all-projects`,
+  `get-project-files`, `search-files`, `get-file-summary`, `get-file`,
+  `get-page`, `get-comment-threads`/`get-comments`, `get-file-snapshots`,
+  `get-file-libraries`, `get-builtin-templates`. Write: `create-project`,
+  `create-file`, `duplicate-file`, `clone-template`, `create-file-snapshot`,
+  `export-binfile`, `import-binfile`.
 - Configuration is `apiUrl` + `token`. If either is empty the plugin still
   loads, and `penpot_status` says `none` while the other tools explain what to
   set.

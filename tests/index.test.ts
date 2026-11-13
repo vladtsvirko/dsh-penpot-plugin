@@ -53,16 +53,29 @@ describe('plugin surface', () => {
     expect(inject).toContain('tools')
   })
 
-  it('always registers the same eight tools, configured or not', () => {
+  it('always registers the same tool surface, configured or not', () => {
     expect([...register().keys()].sort()).toEqual([
+      'penpot_audit',
+      'penpot_clone_template',
+      'penpot_comments',
+      'penpot_create_file',
+      'penpot_create_project',
+      'penpot_duplicate_file',
       'penpot_export',
       'penpot_file',
       'penpot_files',
+      'penpot_find',
       'penpot_import',
+      'penpot_libraries',
+      'penpot_outline',
+      'penpot_pages',
       'penpot_projects',
       'penpot_search',
+      'penpot_snapshots',
       'penpot_status',
       'penpot_teams',
+      'penpot_templates',
+      'penpot_tokens',
     ])
   })
 
@@ -72,6 +85,24 @@ describe('plugin surface', () => {
       backend: 'none',
       label: 'not configured (PENPOT_API_URL / PENPOT_ACCESS_TOKEN)',
     })
+  })
+
+  it('registers the shipped Penpot skill', async () => {
+    let createProvider: ((control: { signal: AbortSignal; invalidate: () => void }) => {
+      list: (options: { signal?: AbortSignal }) => Promise<readonly { name: string; description: string; resourceBase?: { path?: string } }[]>
+      get: (candidate: unknown, options: { signal?: AbortSignal }) => Promise<{ content: string } | undefined>
+    }) | undefined
+    apply({
+      tools: { register: () => undefined },
+      skills: { registerProvider: (create: typeof createProvider) => { createProvider = create; return () => undefined } },
+    } as never, { apiUrl: { get: () => '' }, token: { get: () => '' } } as never)
+    expect(createProvider).toBeTypeOf('function')
+    const provider = createProvider?.({ signal: new AbortController().signal, invalidate: () => undefined })
+    const candidates = await provider?.list({})
+    expect(candidates?.[0]?.name).toBe('penpot')
+    expect(candidates?.[0]?.description).toContain('Penpot')
+    const loaded = await provider?.get(candidates?.[0], {})
+    expect(loaded?.content).toContain('# Penpot')
   })
 
   it('throws one readable error from a data tool when unconfigured', async () => {

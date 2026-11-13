@@ -5,8 +5,9 @@
  * one small stable tool surface. There is deliberately no MCP path; see
  * docs/DESIGN.md.
  *
- * The tool surface is read + export + import. Writing (Penpot's `update-file`
- * change format) is the open design question; see docs/DESIGN.md.
+ * The tool surface is read + design analysis + safe file management + export/
+ * import. Shape-level writes (Penpot's `update-file` change format) are the open
+ * design question; see docs/DESIGN.md and the shipped skill.
  *
  * @module dsh-penpot-plugin
  */
@@ -15,13 +16,16 @@ import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { createApiBackend } from './api-backend.js'
-import type { PenpotBackend, PenpotRef } from './backend.js'
+import type { PenpotBackend, PenpotPage, PenpotRef } from './backend.js'
+import { auditPage, renderAudit, renderFind, renderOutline, renderPages, renderTokens } from './design.js'
+import { registerPenpotSkill } from './skill.js'
 
 export const name = 'dsh-penpot'
-// `ctx.tools` is a declared service: Cordis refuses the property without an
-// injection declaration, even when the profile has the service mounted. This is
-// what makes the plugin load in a plain profile.
-export const inject = ['tools']
+// `ctx.tools` and `ctx.skills` are declared services: Cordis refuses the
+// properties without an injection declaration, even when the profile has the
+// services mounted. This is what makes the plugin load in a plain profile; the
+// skill provider registers the bundled `penpot` skill.
+export const inject = ['tools', 'skills']
 
 export const Config: Schema<PenpotPluginConfigInput, PenpotPluginConfig> = Schema.object({
   apiUrl: Schema.string().default('').volatile(),
@@ -45,7 +49,20 @@ function describeRefs(value: { backend: string; items: readonly PenpotRef[] }): 
     : `${value.items.map((item) => `${item.id}\t${item.name}`).join('\n')}\n(${value.backend})`
 }
 
+/** One text report: the model reads the rendered Markdown, not a schema tree. */
+const textOutput = (description: string) => ({
+  schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {
+      text: { type: 'string' as const, required: true as const, description },
+    },
+  },
+  render: (_args: unknown, value: { text: string }) => [{ type: 'text' as const, text: value.text }],
+})
+
 export function apply(ctx: Context, config: PenpotPluginConfig): void {
+  registerPenpotSkill(ctx)
   // Volatile fields update in place when the Plugins page saves them, so every
   // tool call resolves the backend from the current values.
   const currentBackend = (): PenpotBackend | undefined => {
@@ -258,6 +275,344 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       const backend = requireBackend()
       const summary = await backend.fileSummary(args.fileId)
       return { backend: backend.kind, file: { id: summary.id, name: summary.name } }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_pages',
+    description: 'List the pages and top-level frames of a Penpot file, with ids, sizes and layer counts. Use it after penpot_file to choose a page or frame.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      maxFrames: { type: 'number', description: 'Maximum frames to list; default 100.' },
+    },
+    output: textOutput('Pages and frames, one per line.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      return { text: renderPages(file, Math.max(1, Math.min(1000, Math.floor(args.maxFrames ?? 100)))) }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_outline',
+    description: 'Print a page layer tree with bounds, fills, typography and text. Pass rootId to focus on one frame; depth and maxShapes keep the report bounded.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      pageId: { type: 'string', description: 'Page uuid from penpot_pages; defaults to the first page.' },
+      rootId: { type: 'string', description: 'Shape or frame uuid to start from; requires pageId.' },
+      depth: { type: 'number', description: 'Nesting levels to print; default 4, maximum 12.' },
+      maxShapes: { type: 'number', description: 'Maximum shapes to print; default 300, maximum 2000.' },
+      includeStyles: { type: 'boolean', description: 'Include fills, strokes, radii and typography; default true.' },
+      includeText: { type: 'boolean', description: 'Include text content; default true.' },
+    },
+    output: textOutput('The page outline.'),
+    async execute(args) {
+      if (args.rootId !== undefined && args.pageId === undefined) {
+        throw new Error('penpot_outline needs pageId when rootId is given')
+      }
+      const backend = requireBackend()
+      const page = await backend.page(args.fileId, args.pageId, args.rootId)
+      return { text: renderOutline(page, {
+        ...(args.rootId === undefined ? {} : { rootId: args.rootId }),
+        ...(args.depth === undefined ? {} : { depth: args.depth }),
+        ...(args.maxShapes === undefined ? {} : { maxShapes: args.maxShapes }),
+        ...(args.includeStyles === undefined ? {} : { includeStyles: args.includeStyles }),
+        ...(args.includeText === undefined ? {} : { includeText: args.includeText }),
+      }) }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_find',
+    description: 'Find layers in a Penpot page by name or text, optionally restricted to one shape type.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      pageId: { type: 'string', description: 'Page uuid from penpot_pages; defaults to the first page.' },
+      query: { type: 'string', required: true, description: 'Case-insensitive text to match in layer names or text content.' },
+      type: { type: 'string', description: 'Optional shape type: text, rect, circle, frame, path, group, image…' },
+      limit: { type: 'number', description: 'Maximum matches; default 50.' },
+    },
+    output: textOutput('Matching layers with ids and locations.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const page = await backend.page(args.fileId, args.pageId)
+      return { text: renderFind(page, args.query, args.type, args.limit ?? 50) }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_tokens',
+    description: 'Read design tokens: the file token library plus the colors, typography and radii actually used on a page. JSON is complete; CSS is ready for :root.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      pageId: { type: 'string', description: 'Page uuid for used tokens; defaults to the first page.' },
+      format: { type: 'string', description: 'json (default) or css.' },
+    },
+    output: textOutput('Token report as JSON or CSS.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const pageId = args.pageId ?? file.data.pages[0] ?? Object.keys(file.data.pagesIndex)[0]
+      const page = pageId === undefined ? undefined : file.data.pagesIndex[pageId]
+      if (pageId !== undefined && page === undefined) throw new Error(`page ${pageId} is not in file ${args.fileId}`)
+      const format = args.format === 'css' ? 'css' : 'json'
+      return { text: renderTokens(file, page, format) }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_audit',
+    description: 'Audit one Penpot page for WCAG contrast, text under 12px, text overflowing its box, empty frames and duplicate layer names. Read-only.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      pageId: { type: 'string', description: 'Page uuid from penpot_pages; defaults to the first page.' },
+    },
+    output: textOutput('Audit findings grouped by severity.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const page = await backend.page(args.fileId, args.pageId)
+      return { text: renderAudit(page, auditPage(page)) }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_comments',
+    description: 'List comment threads on a file, or the replies in one thread. Use it to turn design feedback into work.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      threadId: { type: 'string', description: 'Thread uuid to read its replies; omit to list threads.' },
+      includeResolved: { type: 'boolean', description: 'Include resolved threads when listing; default true.' },
+      limit: { type: 'number', description: 'Maximum threads or replies; default 50.' },
+    },
+    output: textOutput('Threads or replies.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const threads = await backend.commentThreads(args.fileId)
+      const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)))
+      const pageCache = new Map<string, PenpotPage | undefined>()
+      const pageFor = async (pageId: string): Promise<PenpotPage | undefined> => {
+        if (pageId.length === 0) return undefined
+        if (pageCache.has(pageId)) return pageCache.get(pageId)
+        let page: PenpotPage | undefined
+        try { page = await backend.page(args.fileId, pageId) } catch { page = undefined }
+        pageCache.set(pageId, page)
+        return page
+      }
+      const frameName = async (pageId: string, frameId: string): Promise<string | undefined> => {
+        if (frameId.length === 0) return undefined
+        const page = await pageFor(pageId)
+        const frame = page?.objects[frameId]
+        return frame?.name
+      }
+      if (args.threadId !== undefined) {
+        const thread = threads.find((item) => item.id === args.threadId)
+        if (thread === undefined) throw new Error(`comment thread ${args.threadId} is not on file ${args.fileId}`)
+        const replies = (await backend.comments(args.threadId)).slice(0, limit)
+        const page = await pageFor(thread.pageId)
+        const frame = page?.objects[thread.frameId]?.name
+        const where = [thread.pageName ?? page?.name, frame].filter((part): part is string => part !== undefined && part.length > 0).join(' / ')
+        const position = thread.position === undefined ? '' : ` (${String(thread.position.x)}, ${String(thread.position.y)})`
+        const lines = [`# Thread #${String(thread.seqn)} — ${thread.isResolved ? 'resolved' : 'open'}`, `${where}${position}`]
+        for (const reply of replies) {
+          lines.push('')
+          lines.push(`${reply.ownerFullname ?? 'Unknown'}${reply.createdAt === undefined ? '' : ` · ${reply.createdAt}`}`)
+          for (const line of reply.content.split(/\r?\n/u)) lines.push(`  ${line}`)
+        }
+        if (replies.length === 0) lines.push('', 'No replies.')
+        return { text: lines.join('\n') }
+      }
+      const filtered = (args.includeResolved === false ? threads.filter((thread) => !thread.isResolved) : threads)
+        .slice()
+        .sort((left, right) => right.seqn - left.seqn)
+        .slice(0, limit)
+      const lines = [`# Comments — file ${args.fileId}`, `${String(filtered.length)} thread${filtered.length === 1 ? '' : 's'}`]
+      for (const thread of filtered) {
+        const frame = await frameName(thread.pageId, thread.frameId)
+        const where = [thread.pageName, frame].filter((part): part is string => part !== undefined && part.length > 0).join(' / ')
+        const position = thread.position === undefined ? '' : ` (${String(thread.position.x)}, ${String(thread.position.y)})`
+        lines.push('')
+        lines.push(`#${String(thread.seqn)} ${thread.isResolved ? 'resolved' : 'open'} — ${where}${position}`)
+        for (const line of thread.content.split(/\r?\n/u)) lines.push(`  ${line}`)
+        lines.push(`  ${String(thread.countComments ?? 1)} comment${(thread.countComments ?? 1) === 1 ? '' : 's'}; read with threadId ${thread.id}`)
+      }
+      if (filtered.length === 0) lines.push('', 'No comment threads.')
+      return { text: lines.join('\n') }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_snapshots',
+    description: 'List a file version history, or create a named snapshot before a risky change. Creating a snapshot does not modify the design.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      create: { type: 'string', description: 'Optional label; create a snapshot with this label before listing.' },
+      limit: { type: 'number', description: 'Maximum snapshots; default 50.' },
+    },
+    output: textOutput('Snapshot list.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const lines: string[] = []
+      if (args.create !== undefined && args.create.length > 0) {
+        const created = await backend.createSnapshot(args.fileId, args.create)
+        lines.push(`Created snapshot ${created.id}${created.label === undefined ? '' : ` “${created.label}”`}`, '')
+      }
+      const snapshots = (await backend.snapshots(args.fileId))
+        .slice()
+        .sort((left, right) => (right.createdAt ?? '').localeCompare(left.createdAt ?? ''))
+        .slice(0, Math.max(1, Math.min(200, Math.floor(args.limit ?? 50))))
+      lines.push(`# Snapshots — file ${args.fileId}`, `${String(snapshots.length)} snapshot${snapshots.length === 1 ? '' : 's'}`)
+      for (const snapshot of snapshots) {
+        lines.push(`- ${snapshot.id}${snapshot.label === undefined ? '' : ` “${snapshot.label}”`} · revn ${String(snapshot.revn ?? '?')} · ${snapshot.createdAt ?? 'unknown date'}${snapshot.createdBy === undefined ? '' : ` · ${snapshot.createdBy}`}`)
+      }
+      if (snapshots.length === 0) lines.push('', 'No snapshots yet.')
+      return { text: lines.join('\n') }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_libraries',
+    description: 'List design-system libraries linked to a Penpot file, including transitive references.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+    },
+    output: textOutput('Linked libraries.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const libraries = await backend.libraries(args.fileId)
+      const lines = [`# Libraries — file ${args.fileId}`]
+      if (libraries.length === 0) {
+        lines.push('No linked libraries.')
+      } else {
+        for (const library of libraries) {
+          lines.push(`- ${library.id} “${library.name}”${library.projectId === undefined ? '' : ` · project ${library.projectId}`}${library.isIndirect === true ? ' · indirect' : ''}${library.syncedAt === undefined ? '' : ` · synced ${library.syncedAt}`}`)
+        }
+      }
+      return { text: lines.join('\n') }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_templates',
+    description: 'List the built-in Penpot templates available to penpot_clone_template on this deployment.',
+    parameters: {},
+    output: textOutput('Template ids and names.'),
+    async execute() {
+      const backend = requireBackend()
+      const templates = await backend.templates()
+      const lines = [`# Built-in templates`, `${String(templates.length)} template${templates.length === 1 ? '' : 's'}`]
+      for (const template of templates) lines.push(`- ${template.id} “${template.name}”`)
+      if (templates.length === 0) lines.push('', 'No templates configured.')
+      return { text: lines.join('\n') }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_create_project',
+    description: 'Create a Penpot project in a team. Omit teamId to use the first team the account can see.',
+    parameters: {
+      name: { type: 'string', required: true, description: 'Project name.' },
+      teamId: { type: 'string', description: 'Team uuid from penpot_teams; defaults to the first team.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', required: true, description: 'New project uuid.' },
+          name: { type: 'string', required: true, description: 'Project name.' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `created project ${value.id} “${value.name}”` }],
+    },
+    async execute(args) {
+      const backend = requireBackend()
+      const teamId = args.teamId ?? (await backend.listTeams())[0]?.id
+      if (teamId === undefined || teamId.length === 0) throw new Error('no Penpot team found — create one in Penpot first')
+      return await backend.createProject({ teamId, name: args.name })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_create_file',
+    description: 'Create an empty Penpot file in a project. Use penpot_clone_template when you want a starter design.',
+    parameters: {
+      projectId: { type: 'string', required: true, description: 'Project uuid from penpot_projects.' },
+      name: { type: 'string', required: true, description: 'File name.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', required: true, description: 'New file uuid.' },
+          name: { type: 'string', required: true, description: 'File name.' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `created file ${value.id} “${value.name}”` }],
+    },
+    async execute(args) {
+      const backend = requireBackend()
+      return await backend.createFile({ projectId: args.projectId, name: args.name })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_duplicate_file',
+    description: 'Duplicate a Penpot file in its current project. Useful as a baseline before an import or a redesign.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid to duplicate.' },
+      name: { type: 'string', description: 'Name for the copy; Penpot chooses one when omitted.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', required: true, description: 'New file uuid.' },
+          name: { type: 'string', required: true, description: 'New file name.' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `duplicated to ${value.id} “${value.name}”` }],
+    },
+    async execute(args) {
+      const backend = requireBackend()
+      return await backend.duplicateFile({ fileId: args.fileId, ...(args.name === undefined ? {} : { name: args.name }) })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_clone_template',
+    description: 'Clone a built-in Penpot template into a project. List choices with penpot_templates first.',
+    parameters: {
+      projectId: { type: 'string', required: true, description: 'Target project uuid.' },
+      templateId: { type: 'string', required: true, description: 'Template id from penpot_templates.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          files: {
+            type: 'array',
+            required: true,
+            description: 'Files created by the template; some templates produce several.',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                id: { type: 'string', required: true, description: 'New file uuid.' },
+                name: { type: 'string', required: true, description: 'File name.' },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: value.files.map((file) => `${file.id}\t${file.name}`).join('\n') }],
+    },
+    async execute(args) {
+      const backend = requireBackend()
+      const files = await backend.cloneTemplate({ projectId: args.projectId, templateId: args.templateId })
+      return { files }
     },
   }))
 

@@ -80,6 +80,56 @@ describe('api backend', () => {
     await expect(backend.listTeams()).rejects.toBeInstanceOf(PenpotApiError)
   })
 
+  it('reads a page and maps a comment thread', async () => {
+    const base = await start((call, response) => {
+      if (call.url.includes('get-page')) {
+        json(response, { id: 'page-1', name: 'Page 1', objects: { a: { id: 'a', name: 'A', type: 'rect', x: 0, y: 0, width: 1, height: 1 } } })
+        return
+      }
+      if (call.url.includes('get-comment-threads')) {
+        json(response, [{ id: 'thread-1', seqn: 2, content: 'Fix the label', isResolved: false, pageId: 'page-1', frameId: 'frame-1', position: { x: 3, y: 4 }, ownerFullname: 'Vlad', countComments: 1 }])
+        return
+      }
+      json(response, [])
+    })
+    const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+    expect(await backend.page('file-1', 'page-1')).toEqual({ id: 'page-1', name: 'Page 1', objects: { a: { id: 'a', name: 'A', type: 'rect', x: 0, y: 0, width: 1, height: 1 } } })
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ 'file-id': 'file-1', 'page-id': 'page-1' })
+    expect(await backend.commentThreads('file-1')).toEqual([{ id: 'thread-1', seqn: 2, content: 'Fix the label', isResolved: false, pageId: 'page-1', frameId: 'frame-1', position: { x: 3, y: 4 }, ownerFullname: 'Vlad', countComments: 1 }])
+  })
+
+  it('reads file data with the token library', async () => {
+    const base = await start((_call, response) => json(response, { id: 'file-1', name: 'Design', revn: 3, vern: 1, projectId: 'p', teamId: 't', data: { pages: ['page-1'], pagesIndex: { 'page-1': { id: 'page-1', name: 'Page 1', objects: {} } }, tokensLib: { Base: {} } } }))
+    const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+    expect(await backend.fileData('file-1')).toMatchObject({ id: 'file-1', name: 'Design', revn: 3, data: { pages: ['page-1'] } })
+    expect(calls[0]?.url).toBe('/api/rpc/command/get-file')
+  })
+
+  it('creates, duplicates and clones files', async () => {
+    const base = await start((call, response) => {
+      if (call.url.includes('clone-template')) {
+        response.writeHead(200, { 'content-type': 'text/event-stream' })
+        response.end('event: progress\ndata: {"~:section":"~:v1/files"}\n\nevent: end\ndata: {"~#set":["~u00000000-0000-0000-0000-000000000003"]}\n\n')
+        return
+      }
+      if (call.url.includes('get-file-summary')) {
+        json(response, { id: '00000000-0000-0000-0000-000000000003', name: 'Cloned template' })
+        return
+      }
+      if (call.url.includes('create-project')) {
+        json(response, { id: 'proj-1', name: 'New project' })
+        return
+      }
+      json(response, { id: 'file-1', name: 'New file' })
+    })
+    const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+    expect(await backend.createProject({ teamId: 'team-1', name: 'New project' })).toEqual({ id: 'proj-1', name: 'New project' })
+    expect(await backend.createFile({ projectId: 'proj-1', name: 'New file' })).toEqual({ id: 'file-1', name: 'New file' })
+    expect(await backend.duplicateFile({ fileId: 'file-1' })).toEqual({ id: 'file-1', name: 'New file' })
+    expect(await backend.cloneTemplate({ projectId: 'proj-1', templateId: 'welcome' })).toEqual([{ id: '00000000-0000-0000-0000-000000000003', name: 'Cloned template' }])
+    expect(calls.at(-1)?.url).toBe('/api/rpc/command/get-file-summary')
+  })
+
   it('reads the SSE export URL and the SSE import id', async () => {
     let downloadUrl = ''
     const base = await start((call, response) => {

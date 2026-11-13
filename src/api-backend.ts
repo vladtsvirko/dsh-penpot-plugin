@@ -6,7 +6,19 @@
 
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
-import type { PenpotBackend, PenpotFileSummary, PenpotRef } from './backend.js'
+import type {
+  PenpotBackend,
+  PenpotComment,
+  PenpotCommentThread,
+  PenpotFileData,
+  PenpotFileSummary,
+  PenpotLibrary,
+  PenpotPage,
+  PenpotRef,
+  PenpotShape,
+  PenpotSnapshot,
+  PenpotTemplate,
+} from './backend.js'
 
 export interface ApiBackendOptions {
   apiUrl: string
@@ -135,6 +147,10 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
     return response
   }
 
+  const rpcJson = async <T>(command: string, body: Record<string, unknown> = {}): Promise<T> => {
+    return await (await rpc(command, body)).json() as T
+  }
+
   return {
     kind: 'api',
     label: `api ${base}`,
@@ -160,6 +176,168 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
       const raw = await (await rpc('get-file-summary', { id: fileId })).json() as Record<string, unknown>
       const pages = Array.isArray(raw['pages']) ? asRefs(raw['pages']) : undefined
       return { id: String(raw['id'] ?? fileId), name: String(raw['name'] ?? ''), ...(pages === undefined ? {} : { pages }), raw }
+    },
+
+    async fileData(fileId) {
+      const raw = await rpcJson<Record<string, unknown>>('get-file', { id: fileId })
+      const data = (raw['data'] ?? {}) as Record<string, unknown>
+      const pages = Array.isArray(data['pages']) ? data['pages'].map(String) : []
+      const pagesIndex = (data['pagesIndex'] ?? {}) as Record<string, PenpotPage>
+      return {
+        id: String(raw['id'] ?? fileId),
+        name: String(raw['name'] ?? ''),
+        revn: Number(raw['revn'] ?? 0),
+        vern: Number(raw['vern'] ?? 0),
+        ...(typeof raw['projectId'] === 'string' ? { projectId: raw['projectId'] } : {}),
+        ...(typeof raw['teamId'] === 'string' ? { teamId: raw['teamId'] } : {}),
+        data: {
+          pages,
+          pagesIndex,
+          ...(data['tokensLib'] === undefined ? {} : { tokensLib: data['tokensLib'] as Record<string, unknown> }),
+          ...(data['typographies'] === undefined ? {} : { typographies: data['typographies'] as Record<string, unknown> }),
+        },
+      }
+    },
+
+    async page(fileId, pageId, objectId) {
+      const raw = await rpcJson<Record<string, unknown>>('get-page', {
+        'file-id': fileId,
+        ...(pageId === undefined ? {} : { 'page-id': pageId }),
+        ...(objectId === undefined ? {} : { 'object-id': objectId }),
+      })
+      return {
+        id: String(raw['id'] ?? pageId ?? ''),
+        name: String(raw['name'] ?? ''),
+        objects: (raw['objects'] ?? {}) as Record<string, PenpotShape>,
+      }
+    },
+
+    async commentThreads(fileId) {
+      const raw = await rpcJson<Array<Record<string, unknown>>>('get-comment-threads', { 'file-id': fileId })
+      return raw.map((item): PenpotCommentThread => {
+        const position = item['position']
+        return {
+          id: String(item['id'] ?? ''),
+          seqn: Number(item['seqn'] ?? 0),
+          content: String(item['content'] ?? ''),
+          isResolved: Boolean(item['isResolved']),
+          pageId: String(item['pageId'] ?? ''),
+          ...(typeof item['pageName'] === 'string' ? { pageName: item['pageName'] } : {}),
+          frameId: String(item['frameId'] ?? ''),
+          ...(position !== null && typeof position === 'object' && 'x' in position && 'y' in position
+            ? { position: { x: Number((position as { x: unknown }).x), y: Number((position as { y: unknown }).y) } }
+            : {}),
+          ...(typeof item['ownerFullname'] === 'string' ? { ownerFullname: item['ownerFullname'] } : {}),
+          ...(typeof item['createdAt'] === 'string' ? { createdAt: item['createdAt'] } : {}),
+          ...(typeof item['modifiedAt'] === 'string' ? { modifiedAt: item['modifiedAt'] } : {}),
+          ...(typeof item['countComments'] === 'number' ? { countComments: item['countComments'] } : {}),
+          ...(typeof item['countUnreadComments'] === 'number' ? { countUnreadComments: item['countUnreadComments'] } : {}),
+        }
+      })
+    },
+
+    async comments(threadId) {
+      const raw = await rpcJson<Array<Record<string, unknown>>>('get-comments', { 'thread-id': threadId })
+      return raw.map((item): PenpotComment => ({
+        id: String(item['id'] ?? ''),
+        threadId: String(item['threadId'] ?? threadId),
+        content: String(item['content'] ?? ''),
+        ...(typeof item['ownerFullname'] === 'string' ? { ownerFullname: item['ownerFullname'] } : {}),
+        ...(typeof item['createdAt'] === 'string' ? { createdAt: item['createdAt'] } : {}),
+      }))
+    },
+
+    async snapshots(fileId) {
+      const raw = await rpcJson<Array<Record<string, unknown>>>('get-file-snapshots', { 'file-id': fileId })
+      return raw.map((item): PenpotSnapshot => ({
+        id: String(item['id'] ?? ''),
+        ...(typeof item['label'] === 'string' ? { label: item['label'] } : {}),
+        ...(typeof item['revn'] === 'number' ? { revn: item['revn'] } : {}),
+        ...(typeof item['createdAt'] === 'string' ? { createdAt: item['createdAt'] } : {}),
+        ...(typeof item['createdBy'] === 'string' ? { createdBy: item['createdBy'] } : {}),
+      }))
+    },
+
+    async createSnapshot(fileId, label) {
+      const raw = await rpcJson<Record<string, unknown>>('create-file-snapshot', {
+        'file-id': fileId,
+        ...(label === undefined || label.length === 0 ? {} : { label }),
+      })
+      return {
+        id: String(raw['id'] ?? ''),
+        ...(typeof raw['label'] === 'string' ? { label: raw['label'] } : {}),
+        ...(typeof raw['revn'] === 'number' ? { revn: raw['revn'] } : {}),
+        ...(typeof raw['createdAt'] === 'string' ? { createdAt: raw['createdAt'] } : {}),
+        ...(typeof raw['createdBy'] === 'string' ? { createdBy: raw['createdBy'] } : {}),
+      }
+    },
+
+    async libraries(fileId) {
+      const raw = await rpcJson<Array<Record<string, unknown>>>('get-file-libraries', { 'file-id': fileId })
+      return raw.map((item): PenpotLibrary => ({
+        id: String(item['id'] ?? ''),
+        name: String(item['name'] ?? ''),
+        ...(typeof item['projectId'] === 'string' ? { projectId: item['projectId'] } : {}),
+        ...(typeof item['syncedAt'] === 'string' ? { syncedAt: item['syncedAt'] } : {}),
+        ...(typeof item['isIndirect'] === 'boolean' ? { isIndirect: item['isIndirect'] } : {}),
+      }))
+    },
+
+    async templates() {
+      const raw = await rpcJson<Array<Record<string, unknown>>>('get-builtin-templates')
+      return raw.map((item): PenpotTemplate => ({
+        id: String(item['id'] ?? ''),
+        name: String(item['name'] ?? ''),
+      }))
+    },
+
+    async createProject({ teamId, name }) {
+      const raw = await rpcJson<Record<string, unknown>>('create-project', { 'team-id': teamId, name })
+      return { id: String(raw['id'] ?? ''), name: String(raw['name'] ?? name) }
+    },
+
+    async createFile({ projectId, name }) {
+      const raw = await rpcJson<Record<string, unknown>>('create-file', { 'project-id': projectId, name })
+      return { id: String(raw['id'] ?? ''), name: String(raw['name'] ?? name) }
+    },
+
+    async duplicateFile({ fileId, name }) {
+      const raw = await rpcJson<Record<string, unknown>>('duplicate-file', {
+        'file-id': fileId,
+        ...(name === undefined || name.length === 0 ? {} : { name }),
+      })
+      return { id: String(raw['id'] ?? ''), name: String(raw['name'] ?? '') }
+    },
+
+    async cloneTemplate({ projectId, templateId }) {
+      const response = await rpc('clone-template', { 'project-id': projectId, 'template-id': templateId })
+      const events = await readSse(response)
+      failOnErrorEvent(events)
+      const ids = new Set<string>()
+      const collectIds = (value: unknown): void => {
+        if (typeof value === 'string') {
+          if (value.length > 0) ids.add(value)
+          return
+        }
+        if (Array.isArray(value)) {
+          for (const item of value) collectIds(item)
+          return
+        }
+        if (value === null || typeof value !== 'object') return
+        const record = value as Record<string, unknown>
+        for (const key of ['id', 'fileId', 'file-id']) collectIds(record[key])
+        for (const key of ['set', 'vector', 'list', 'files']) collectIds(record[key])
+      }
+      collectIds(lastEnd(events))
+      if (ids.size === 0) {
+        throw new PenpotApiError(response.status, 'the template clone finished without a file id')
+      }
+      const files: PenpotRef[] = []
+      for (const id of ids) {
+        const summary = await this.fileSummary(id)
+        files.push({ id: summary.id, name: summary.name })
+      }
+      return files
     },
 
     async exportFile(fileId) {

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.0
+
+- **Inspect a design, not just its name.** `penpot_pages`, `penpot_outline`,
+  `penpot_find` and `penpot_audit` read pages, frames, layer trees, text, fills,
+  typography and geometry. The outline accepts a `rootId`, depth and shape cap;
+  the other reads accept a page, so a large file stays bounded.
+- **Design tokens, both kinds.** `penpot_tokens` reads Penpot's DTCG-style
+  `data.tokensLib` (active sets, themes, aliases, math) and the colors,
+  typography and radii actually used on a page. `format: "css"` resolves
+  expressions such as `8*1.25` into `px` values; JSON keeps the complete report.
+- **Design QA.** `penpot_audit` reports WCAG contrast (against the nearest
+  filled sibling/frame), text under 12px, text wider than its box, empty frames
+  and duplicate layer names. It is read-only and marks the background it used.
+- **Feedback and history.** `penpot_comments` reads threads and replies;
+  `penpot_snapshots` lists version history and can create a named snapshot
+  before a risky change. `penpot_libraries` lists linked design systems.
+- **Project and file workflow.** `penpot_create_project`, `penpot_create_file`,
+  `penpot_duplicate_file`, `penpot_templates` and `penpot_clone_template` cover
+  the safe parts of the management API. Template ids arrive as a Penpot transit
+  set (`{~#set: […]}`), which the SSE reader now handles.
+- **The Penpot skill ships in the package.** `skills/penpot/SKILL.md` plus
+  `references/{rpc,shapes,write,design-to-code,troubleshooting}.md` is registered
+  on `ctx.skills` by the Host row. It covers discovery, reading, tokens, audit,
+  comments, versions, export/import, the `update-file` write format and the
+  deployment traps, so an agent can use Penpot without a second install.
+- **Backend and analysis are split.** `design.ts` is pure shape analysis
+  (text extraction, tokens, outline, audit); `api-backend.ts` owns RPC/SSE. Tests
+  cover both with a fixture and a fake HTTP server. 21 tools total.
+- Known limit: the export download still requires the deployment to proxy
+  `/assets/by-id/`; per-frame PNG/SVG export is not an RPC command. Shape-level
+  write tools are documented in the skill but not exposed in this release.
+
 ## 0.4.6
 
 - **Export understands Penpot 2.18's end event.** `export-binfile` ends with

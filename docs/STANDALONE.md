@@ -18,7 +18,7 @@ runtime it is installed into.
 
 ```sh
 # Published package: the tarball already contains lib/, so no build script.
-dsh plugin --profile penpot add dsh-penpot-plugin@0.4.6
+dsh plugin --profile penpot add dsh-penpot-plugin@0.5.0
 ```
 
 From the source repository instead, allow the build and pin the tag:
@@ -28,13 +28,17 @@ allowBuilds:
   dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
 ```
 ```sh
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.4.6
+dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.5.0
 ```
 
 The bundle's own patch inserts the `dsh-penpot` row. On DSH `0.2.1-rc.5` or
 newer, configure it in the UI: **Plugins** → **dsh-penpot-plugin** →
 **Configure**, set the API URL and the access token, **Save**. The page writes
 the row's config; no environment export is needed.
+
+The bundle also registers its `penpot` skill on `ctx.skills`, so the agent has
+the workflow and the RPC notes as soon as the Host row is active. No separate
+skill directory or profile entry is needed.
 
 For an older DSH or a headless profile, the row reads both values from the
 runtime environment:
