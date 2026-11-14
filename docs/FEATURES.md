@@ -26,7 +26,7 @@ checked against a live deployment.
 | Create project/file | write | `penpot_create_project`, `penpot_create_file` |
 | Duplicate file | write | `penpot_duplicate_file` |
 | Whole-file export/import | write | `penpot_export`, `penpot_import` |
-| Shape writes | frames, rects, circles, text, delete | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text`, `penpot_update_text`, `penpot_delete_shape` |
+| Shape writes | frames, rects, circles, text, property updates, delete | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text`, `penpot_update_text`, `penpot_update_shape`, `penpot_delete_shape` |
 | Advanced shape writes | documented | groups, paths, images, components via `update-file`; skill `references/write.md` |
 | Media / object thumbnail bytes | blocked by deployment | metadata only via `get-file-object-thumbnails` |
 | Per-frame PNG/SVG export | not in RPC | whole-file export only |
@@ -43,7 +43,9 @@ rectangles, circles, text creation, text replacement and deletion. The builders
 were validated against Penpot 2.18.6 with a real blank file: frame → rects/text →
 outline/audit → update copy → delete.
 
-The tools deliberately cover the primitives an agent needs to draw a screen.
+The tools deliberately cover the primitives an agent needs to draw and iterate
+a screen. `penpot_update_shape` changes fill, radius, opacity, name and geometry;
+a frame move shifts its descendants, while a frame resize leaves them in place.
 Groups, booleans, paths, images and component instances still require the raw
 change format; adding each needs a reliable schema/template and a component-heavy
 fixture. `update-file` remains the advanced escape hatch, documented in the

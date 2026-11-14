@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.1
+
+- **Shapes are editable, not just append-only.** `penpot_update_shape` changes a
+  layer's name, solid fill, corner radius, opacity, position or size. Text keeps
+  its content but its `positionData` moves with it; use `penpot_update_text` for
+  copy and color.
+- **Moving a frame moves its children.** Frame descendants are shifted with the
+  frame in one `update-file` change set, so a screen stays together. Resizing a
+  frame changes the frame bounds only; children keep their page coordinates.
+- **Validated live.** The demo card's fill and radius were changed, the avatar
+  was renamed and made 0.9 opacity, the title moved, and a disposable frame with
+  a child was shifted by 100px and then deleted. The child followed the frame.
+- 31 tools total; 35 tests. `README`, the shipped skill and `docs/FEATURES.md`
+  now route shape iteration through `penpot_update_shape`.
+- Still open: wrapped text metrics, groups/paths/images/components, media bytes
+  behind the `/assets/by-id/` proxy, and per-frame image export.
+
 ## 0.6.0
 
 - **The agent can draw.** `penpot_add_frame`, `penpot_add_rect`,

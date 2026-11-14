@@ -18,7 +18,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { createApiBackend } from './api-backend.js'
 import type { PenpotBackend, PenpotFileData, PenpotPage, PenpotRef, PenpotShape } from './backend.js'
-import { auditPage, renderAudit, renderFind, renderOutline, renderPages, renderTokens } from './design.js'
+import { auditPage, childrenOf, renderAudit, renderFind, renderOutline, renderPages, renderTokens } from './design.js'
 import { createCircle, createFrame, createRect, createText, ROOT_ID, updateTextShape } from './shapes.js'
 import type { TextStyle } from './shapes.js'
 import { registerPenpotSkill } from './skill.js'
@@ -960,6 +960,137 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         changes: [{ type: 'del-obj', id: found.shape.id, 'page-id': found.page.id }],
       })
       return { id: found.shape.id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_update_shape',
+    description: 'Update a shape\'s name, solid fill, corner radius, opacity or geometry. Moving a frame also shifts its descendants; resizing a frame does not. Text color is changed through penpot_update_text.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      shapeId: { type: 'string', required: true, description: 'Shape or frame uuid.' },
+      name: { type: 'string', description: 'New layer name.' },
+      x: { type: 'number', description: 'New page x coordinate.' },
+      y: { type: 'number', description: 'New page y coordinate.' },
+      width: { type: 'number', description: 'New width.' },
+      height: { type: 'number', description: 'New height.' },
+      fill: { type: 'string', description: 'New solid fill color. Not supported for text; use penpot_update_text color.' },
+      radius: { type: 'number', description: 'New corner radius for a frame or rect.' },
+      opacity: { type: 'number', description: 'New 0…1 opacity.' },
+    },
+    output: idOutput('updated shape'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const found = locateShape(file, args.shapeId)
+      if (found === undefined) throw new Error(`shape ${args.shapeId} is not in file ${args.fileId}`)
+      const shape = found.shape
+      if (shape.id === ROOT_ID) throw new Error('the page root cannot be updated')
+      if (shape.type === 'text' && args.fill !== undefined) throw new Error('text color: use penpot_update_text with color')
+      if (shape.type === 'text' && args.radius !== undefined) throw new Error('corner radius does not apply to text')
+      if (shape.type !== 'frame' && shape.type !== 'rect' && args.radius !== undefined) throw new Error('corner radius applies to frames and rects')
+      const geometryChanged = args.x !== undefined || args.y !== undefined || args.width !== undefined || args.height !== undefined
+      if (geometryChanged && !['frame', 'rect', 'circle', 'text'].includes(shape.type)) {
+        throw new Error('geometry editing is supported for frames, rects, circles and text')
+      }
+      const x = args.x ?? shape.x
+      const y = args.y ?? shape.y
+      const width = args.width ?? shape.width
+      const height = args.height ?? shape.height
+      if (width <= 0 || height <= 0) throw new Error('width and height must be positive')
+      const value: Record<string, unknown> = {}
+      if (args.name !== undefined) value.name = args.name
+      if (args.opacity !== undefined) value.opacity = args.opacity
+      if (geometryChanged) {
+        value.x = x
+        value.y = y
+        value.width = width
+        value.height = height
+        value.selrect = {
+          x,
+          y,
+          width,
+          height,
+          x1: x,
+          y1: y,
+          x2: x + width,
+          y2: y + height,
+        }
+        value.points = [
+          { x, y },
+          { x: x + width, y },
+          { x: x + width, y: y + height },
+          { x, y: y + height },
+        ]
+      }
+      if (shape.type === 'text' && geometryChanged) {
+        const dx = x - shape.x
+        const dy = y - shape.y
+        const entries = Array.isArray(shape.positionData) ? shape.positionData : []
+        if (entries.length > 0) {
+          value.positionData = entries.map((entry) => ({
+            ...entry,
+            x: Number(entry['x'] ?? shape.x) + dx,
+            y: Number(entry['y'] ?? shape.y) + dy,
+            ...(width === shape.width ? {} : { width, x2: width }),
+          }))
+        }
+      }
+      if (args.fill !== undefined) value.fills = [{ fillColor: args.fill, fillOpacity: 1 }]
+      if (args.radius !== undefined) {
+        value.r1 = args.radius
+        value.r2 = args.radius
+        value.r3 = args.radius
+        value.r4 = args.radius
+      }
+      if (Object.keys(value).length === 0) throw new Error('penpot_update_shape needs at least one property to change')
+      const changes: Array<Record<string, unknown>> = [{
+        type: 'mod-obj',
+        id: shape.id,
+        'page-id': found.page.id,
+        operations: [{ type: 'assign', value }],
+      }]
+      if (shape.type === 'frame' && geometryChanged && (x !== shape.x || y !== shape.y)) {
+        const dx = x - shape.x
+        const dy = y - shape.y
+        const descendants: PenpotShape[] = []
+        const collect = (parentId: string): void => {
+          for (const child of childrenOf(found.page, parentId)) {
+            descendants.push(child)
+            collect(child.id)
+          }
+        }
+        collect(shape.id)
+        for (const child of descendants) {
+          const shifted: Record<string, unknown> = {
+            x: child.x + dx,
+            y: child.y + dy,
+            selrect: {
+              ...(typeof child.selrect === 'object' && child.selrect !== null ? child.selrect as Record<string, number> : { x: child.x, y: child.y, width: child.width, height: child.height, x1: child.x, y1: child.y, x2: child.x + child.width, y2: child.y + child.height }),
+              x: child.x + dx,
+              y: child.y + dy,
+              x1: child.x + dx,
+              y1: child.y + dy,
+              x2: child.x + dx + child.width,
+              y2: child.y + dy + child.height,
+            },
+            points: (Array.isArray(child.points) ? child.points : []).map((point) => ({
+              x: Number((point as { x?: unknown }).x ?? 0) + dx,
+              y: Number((point as { y?: unknown }).y ?? 0) + dy,
+            })),
+          }
+          if (child.type === 'text' && Array.isArray(child.positionData)) {
+            shifted.positionData = child.positionData.map((entry) => ({
+              ...entry,
+              x: Number(entry['x'] ?? child.x) + dx,
+              y: Number(entry['y'] ?? child.y) + dy,
+            }))
+          }
+          changes.push({ type: 'mod-obj', id: child.id, 'page-id': found.page.id, operations: [{ type: 'assign', value: shifted }] })
+        }
+      }
+      await backend.updateFile({ fileId: file.id, revn: file.revn, vern: file.vern, changes })
+      return { id: shape.id }
     },
   }))
 

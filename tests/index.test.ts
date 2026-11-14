@@ -84,6 +84,7 @@ describe('plugin surface', () => {
       'penpot_teams',
       'penpot_templates',
       'penpot_tokens',
+      'penpot_update_shape',
       'penpot_update_text',
     ])
   })

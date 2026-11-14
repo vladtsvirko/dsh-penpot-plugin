@@ -20,7 +20,7 @@ component instances is in the skill's `references/write.md`.
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.6.0
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.6.1
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -35,7 +35,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.6.0
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.6.1
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -100,6 +100,7 @@ names the endpoint, and a missing value is reported by name.
 | `penpot_add_rect` | add a rectangle inside a frame |
 | `penpot_add_circle` | add a circle/ellipse inside a frame |
 | `penpot_add_text` | add a text layer with typography and color |
+| `penpot_update_shape` | change name, fill, radius, opacity or geometry |
 | `penpot_update_text` | replace a text layer's copy and re-layout it |
 | `penpot_delete_shape` | delete a layer or a frame subtree |
 | `penpot_create_comment_thread` | start a comment thread on a frame |
@@ -121,8 +122,10 @@ themes, aliases) and the colors, typography and radii actually used on a page.
 Shape writes take **page coordinates**, matching `penpot_outline`: if a frame is
 at `x=430`, a child 24px inside it is `x=454`. `penpot_add_text` creates one
 positioned line per explicit newline and computes the box height, but does not
-measure wrapped text; keep the box wide enough. Take a snapshot before a batch
-or a delete. The add tools return the new shape id; use `penpot_outline` on the
+measure wrapped text; keep the box wide enough. `penpot_update_shape` changes
+fill, radius, opacity, name or geometry; moving a frame also shifts its
+descendants, while resizing a frame does not. Take a snapshot before a batch or
+a delete. The add tools return the new shape id; use `penpot_outline` on the
 frame to verify.
 
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file

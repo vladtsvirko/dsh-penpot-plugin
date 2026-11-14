@@ -41,6 +41,7 @@ usually means by “screen”.
 | Linked design systems | `penpot_libraries` |
 | Create a project / file | `penpot_create_project`, `penpot_create_file` |
 | Draw a frame / rect / circle / text | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text` |
+| Change a shape | `penpot_update_shape` |
 | Change copy in place | `penpot_update_text` |
 | Delete a layer or subtree | `penpot_delete_shape` |
 | Start a comment, reply, resolve | `penpot_create_comment_thread`, `penpot_reply_comment`, `penpot_resolve_comment` |
@@ -102,7 +103,8 @@ rule, the measured value and the layer id; do not silently change the design.
 4. `penpot_add_text` for copy; pass `fontSize`, `fontWeight`, `color`, `align`.
 5. `penpot_add_circle` for avatars or decorative dots.
 6. `penpot_outline` with `rootId` = frame id, then `penpot_audit`.
-7. Fix copy with `penpot_update_text`; remove a trial layer with
+7. Fix copy with `penpot_update_text`; adjust fill, radius, opacity, name or
+   geometry with `penpot_update_shape`; remove a trial layer with
    `penpot_delete_shape`.
 
 A rectangle added after text sits on top; use `index` to control stacking
@@ -137,9 +139,10 @@ not proxy that route, the export fails after Penpot answers 200. See
   builds return no `pages` array from `get-file-summary`.
 - A large file makes `get-file` expensive. Prefer tools that accept `pageId`
   (`penpot_outline`, `penpot_find`, `penpot_audit`).
-- Shape writes cover **frames, rectangles, circles, text and delete**. Groups,
-  booleans, paths, images and component instances need the raw `update-file`
-  format; see `references/write.md`.
+- Shape writes cover **frames, rectangles, circles, text, property updates and
+  delete**. Moving a frame shifts its descendants; resizing a frame does not.
+  Groups, booleans, paths, images and component instances need the raw
+  `update-file` format; see `references/write.md`.
 - Comment write covers thread creation, replies and resolve. Editing an existing
   comment is not exposed.
 - This skill documents Penpot 2.x RPC behavior, tested with 2.18.6. A shape or

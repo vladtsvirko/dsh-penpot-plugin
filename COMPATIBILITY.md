@@ -6,6 +6,7 @@ releases; every row states what was actually exercised.
 
 | Plugin | DSH | Penpot | Status | Notes |
 |---|---|---|---|---|
+| 0.6.1 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live update-shape: fill, radius, name, opacity, text move, frame+child move, delete; 0.6.0 draw/comment suite | adds `penpot_update_shape`; frame move shifts descendants, resize does not; export/media still need `/assets/by-id` proxy |
 | 0.6.0 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live blank-file draw: frame, rect, circle, text, update text, delete; comment create/reply/resolve; read/analysis suite from 0.5.0 | adds 9 write tools and shape builders; explicit-newline text layout; export/media still need `/assets/by-id` proxy |
 | 0.5.0 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live reads: pages, outline, find, tokens, audit, comments, snapshots, libraries, templates, create/duplicate file, clone template; export code unchanged | adds 13 tools and the shipped `penpot` skill; export download still needs `/assets/by-id` proxying; shape writes documented, not exposed |
 | 0.4.6 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | export end event and same-origin auth fixed; the test origin answers nginx 404 for `/assets/by-id/` | decodes `~#uri`; sends the token on same-origin downloads; Save button contrast; public origin must proxy `/assets/by-id` |

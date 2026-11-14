@@ -1,6 +1,6 @@
 {
   "name": "dsh-penpot-plugin",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Penpot for DeepSeek Harness — inspect designs, extract tokens, audit accessibility, draw frames and text, read and write feedback, manage files and export/import .penpot archives over Penpot's HTTP RPC API.",
   "type": "module",
   "main": "lib/index.js",

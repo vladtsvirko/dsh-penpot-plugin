@@ -2,7 +2,7 @@
 
 The plugin exposes the common primitives as tools:
 `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text`,
-`penpot_update_text` and `penpot_delete_shape`. They build the change map below
+`penpot_update_text`, `penpot_update_shape` and `penpot_delete_shape`. They build the change map below
 and apply it against the current file revision. This reference documents the
 raw format for anything the tools do not cover (groups, paths, images,
 components) and for debugging a refusal.
@@ -15,6 +15,7 @@ components) and for debugging a refusal.
 | Rectangle / circle | `penpot_add_rect`, `penpot_add_circle` |
 | Text | `penpot_add_text` |
 | Change copy | `penpot_update_text` |
+| Change fill/radius/opacity/name/geometry | `penpot_update_shape` |
 | Remove a layer | `penpot_delete_shape` |
 
 The add tools take **page coordinates**, not frame-local coordinates. They
