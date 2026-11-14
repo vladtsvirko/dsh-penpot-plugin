@@ -1,8 +1,26 @@
 # Writing Penpot shapes with `update-file`
 
-The plugin does not ship shape-level write tools yet, but the same HTTP API is
-available to a script or a future tool. This is the recipe we proved on Penpot
-2.18.6.
+The plugin exposes the common primitives as tools:
+`penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text`,
+`penpot_update_text` and `penpot_delete_shape`. They build the change map below
+and apply it against the current file revision. This reference documents the
+raw format for anything the tools do not cover (groups, paths, images,
+components) and for debugging a refusal.
+
+## Tools first
+
+| Goal | Tool |
+|---|---|
+| New artboard | `penpot_add_frame` |
+| Rectangle / circle | `penpot_add_rect`, `penpot_add_circle` |
+| Text | `penpot_add_text` |
+| Change copy | `penpot_update_text` |
+| Remove a layer | `penpot_delete_shape` |
+
+The add tools take **page coordinates**, not frame-local coordinates. They
+return the new shape id; call `penpot_outline` on the frame to verify. Text
+tools create one `positionData` line per explicit newline and compute the box
+height, but they do not measure wrapped text.
 
 ## The envelope
 
@@ -133,7 +151,9 @@ Re-register shapes after low-level changes so Penpot recomputes derived data:
    shape's `x` and `y + fontSize * 0.2` as a practical starting point; set
    `width`/`height`/`x1`/`x2`/`y1`/`y2` consistently.
 4. Fill both the span and the shape's `positionData` with the same font and
-   color.
+   color. `penpot_add_text` infers a Google-font `fontId` (`gfont-inter`, …)
+   from the family; for a custom font, copy the `fontId`/`fontVariantId` from
+   an existing text layer.
 5. `add-obj`, then read the page and confirm `positionData.length > 0`. A text
    object with no `positionData` can be invisible even though it exists.
 

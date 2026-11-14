@@ -4,6 +4,7 @@
  * @module dsh-penpot-plugin/api-backend
  */
 
+import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import type {
@@ -307,6 +308,39 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
         ...(name === undefined || name.length === 0 ? {} : { name }),
       })
       return { id: String(raw['id'] ?? ''), name: String(raw['name'] ?? '') }
+    },
+
+    async updateFile({ fileId, revn, vern, changes }) {
+      return await rpcJson<unknown>('update-file', {
+        id: fileId,
+        'session-id': randomUUID(),
+        revn,
+        vern,
+        changes,
+      })
+    },
+
+    async createCommentThread({ fileId, pageId, frameId, x, y, content }) {
+      const raw = await rpcJson<Record<string, unknown>>('create-comment-thread', {
+        'file-id': fileId,
+        'page-id': pageId,
+        'frame-id': frameId,
+        position: { x, y },
+        content,
+      })
+      return { id: String(raw['id'] ?? '') }
+    },
+
+    async createComment({ threadId, content }) {
+      const raw = await rpcJson<Record<string, unknown>>('create-comment', {
+        'thread-id': threadId,
+        content,
+      })
+      return { id: String(raw['id'] ?? '') }
+    },
+
+    async setCommentThreadResolved({ threadId, resolved }) {
+      await rpc('update-comment-thread', { id: threadId, 'is-resolved': resolved })
     },
 
     async cloneTemplate({ projectId, templateId }) {

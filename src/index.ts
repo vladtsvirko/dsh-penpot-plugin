@@ -12,12 +12,15 @@
  * @module dsh-penpot-plugin
  */
 
+import { randomUUID } from 'node:crypto'
 import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { createApiBackend } from './api-backend.js'
-import type { PenpotBackend, PenpotPage, PenpotRef } from './backend.js'
+import type { PenpotBackend, PenpotFileData, PenpotPage, PenpotRef, PenpotShape } from './backend.js'
 import { auditPage, renderAudit, renderFind, renderOutline, renderPages, renderTokens } from './design.js'
+import { createCircle, createFrame, createRect, createText, ROOT_ID, updateTextShape } from './shapes.js'
+import type { TextStyle } from './shapes.js'
 import { registerPenpotSkill } from './skill.js'
 
 export const name = 'dsh-penpot'
@@ -50,6 +53,17 @@ function describeRefs(value: { backend: string; items: readonly PenpotRef[] }): 
 }
 
 /** One text report: the model reads the rendered Markdown, not a schema tree. */
+const idOutput = (label: string) => ({
+  schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {
+      id: { type: 'string' as const, required: true as const, description: 'Penpot uuid of the affected object.' },
+    },
+  },
+  render: (_args: unknown, value: { id: string }) => [{ type: 'text' as const, text: `${label} ${value.id}` }],
+})
+
 const textOutput = (description: string) => ({
   schema: {
     type: 'object' as const,
@@ -78,6 +92,74 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       throw new Error('Penpot is not configured: set the API URL and token on the Plugins page, or set PENPOT_API_URL and PENPOT_ACCESS_TOKEN')
     }
     return backend
+  }
+
+  const pageOf = (file: PenpotFileData, pageId: string | undefined): PenpotPage => {
+    const id = pageId ?? file.data.pages[0] ?? Object.keys(file.data.pagesIndex)[0]
+    const page = id === undefined ? undefined : file.data.pagesIndex[id]
+    if (id === undefined || page === undefined) throw new Error(`page ${id ?? '(default)'} is not in file ${file.id}`)
+    return page
+  }
+
+  const locateShape = (file: PenpotFileData, shapeId: string): { page: PenpotPage; shape: PenpotShape } | undefined => {
+    for (const page of Object.values(file.data.pagesIndex)) {
+      const shape = page.objects[shapeId]
+      if (shape !== undefined) return { page, shape }
+    }
+    return undefined
+  }
+
+  const addShape = async (
+    backend: PenpotBackend,
+    file: PenpotFileData,
+    page: PenpotPage,
+    shape: PenpotShape,
+    parentId: string,
+    index?: number,
+  ): Promise<string> => {
+    const parent = page.objects[parentId]
+    if (parent === undefined) throw new Error(`parent ${parentId} is not in page ${page.id}`)
+    const length = Array.isArray(parent.shapes) ? parent.shapes.length : 0
+    const at = index === undefined ? length : Math.max(0, Math.min(length, Math.floor(index)))
+    await backend.updateFile({
+      fileId: file.id,
+      revn: file.revn,
+      vern: file.vern,
+      changes: [{
+        type: 'add-obj',
+        id: shape.id,
+        'page-id': page.id,
+        'frame-id': shape.frameId ?? parentId,
+        'parent-id': parentId,
+        index: at,
+        obj: shape,
+      }],
+    })
+    return shape.id
+  }
+
+  const textStyleFrom = (args: {
+    fontFamily?: string
+    fontSize?: number
+    fontWeight?: number
+    lineHeight?: number
+    letterSpacing?: number
+    color?: string
+    align?: string
+  }): TextStyle => {
+    const align = args.align
+    if (align !== undefined && !['left', 'right', 'center', 'justify'].includes(align)) {
+      throw new Error('align must be left, right, center or justify')
+    }
+    return {
+      ...(args.fontFamily === undefined ? {} : { fontFamily: args.fontFamily }),
+      ...(args.fontSize === undefined ? {} : { fontSize: args.fontSize }),
+      ...(args.fontWeight === undefined ? {} : { fontWeight: args.fontWeight }),
+      ...(args.lineHeight === undefined ? {} : { lineHeight: args.lineHeight }),
+      ...(args.letterSpacing === undefined ? {} : { letterSpacing: args.letterSpacing }),
+      ...(args.color === undefined ? {} : { color: args.color }),
+      ...(align === undefined ? {} : { textAlign: align as TextStyle['textAlign'] }),
+    }
   }
 
   ctx.tools.register(defineTool({
@@ -613,6 +695,331 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       const backend = requireBackend()
       const files = await backend.cloneTemplate({ projectId: args.projectId, templateId: args.templateId })
       return { files }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_add_frame',
+    description: 'Create a top-level frame (artboard) on a page. x/y are page coordinates; returns the new frame id. Use penpot_add_rect/text with this id for children.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      name: { type: 'string', description: 'Frame name; default "Frame".' },
+      x: { type: 'number', required: true, description: 'Page x coordinate.' },
+      y: { type: 'number', required: true, description: 'Page y coordinate.' },
+      width: { type: 'number', required: true, description: 'Frame width.' },
+      height: { type: 'number', required: true, description: 'Frame height.' },
+      fill: { type: 'string', description: 'Background color, e.g. #FFFFFF.' },
+      radius: { type: 'number', description: 'Corner radius.' },
+      opacity: { type: 'number', description: '0…1; omit for 1.' },
+      index: { type: 'number', description: 'Insertion index among top-level frames; defaults to the end.' },
+    },
+    output: idOutput('created frame'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const id = randomUUID()
+      const shape = createFrame({
+        id,
+        name: args.name ?? 'Frame',
+        pageId: page.id,
+        x: args.x,
+        y: args.y,
+        width: args.width,
+        height: args.height,
+        ...(args.fill === undefined ? {} : { fill: args.fill }),
+        ...(args.radius === undefined ? {} : { radius: args.radius }),
+        ...(args.opacity === undefined ? {} : { opacity: args.opacity }),
+      })
+      await addShape(backend, file, page, shape, ROOT_ID, args.index)
+      return { id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_add_rect',
+    description: 'Add a rectangle inside a frame. x/y are absolute page coordinates; add the frame\'s x/y to the intended local position.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Containing frame uuid from penpot_pages.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      name: { type: 'string', description: 'Layer name; default "Rect".' },
+      x: { type: 'number', required: true, description: 'Page x coordinate.' },
+      y: { type: 'number', required: true, description: 'Page y coordinate.' },
+      width: { type: 'number', required: true, description: 'Width.' },
+      height: { type: 'number', required: true, description: 'Height.' },
+      fill: { type: 'string', description: 'Fill color; default #E5E7EB.' },
+      radius: { type: 'number', description: 'Corner radius.' },
+      opacity: { type: 'number', description: '0…1; omit for 1.' },
+      index: { type: 'number', description: 'Insertion index in the frame; defaults to the end (top).' },
+    },
+    output: idOutput('created rectangle'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const frame = page.objects[args.frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.frameId} is not on page ${page.id}`)
+      const id = randomUUID()
+      const shape = createRect({
+        id,
+        name: args.name ?? 'Rect',
+        pageId: page.id,
+        frameId: args.frameId,
+        x: args.x,
+        y: args.y,
+        width: args.width,
+        height: args.height,
+        ...(args.fill === undefined ? {} : { fill: args.fill }),
+        ...(args.radius === undefined ? {} : { radius: args.radius }),
+        ...(args.opacity === undefined ? {} : { opacity: args.opacity }),
+      })
+      await addShape(backend, file, page, shape, args.frameId, args.index)
+      return { id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_add_circle',
+    description: 'Add a circle or ellipse inside a frame. x/y are absolute page coordinates; returns the new shape id.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Containing frame uuid from penpot_pages.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      name: { type: 'string', description: 'Layer name; default "Circle".' },
+      x: { type: 'number', required: true, description: 'Page x coordinate.' },
+      y: { type: 'number', required: true, description: 'Page y coordinate.' },
+      width: { type: 'number', required: true, description: 'Width.' },
+      height: { type: 'number', required: true, description: 'Height.' },
+      fill: { type: 'string', description: 'Fill color; default #E5E7EB.' },
+      opacity: { type: 'number', description: '0…1; omit for 1.' },
+      index: { type: 'number', description: 'Insertion index in the frame; defaults to the end (top).' },
+    },
+    output: idOutput('created circle'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const frame = page.objects[args.frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.frameId} is not on page ${page.id}`)
+      const id = randomUUID()
+      const shape = createCircle({
+        id,
+        name: args.name ?? 'Circle',
+        pageId: page.id,
+        frameId: args.frameId,
+        x: args.x,
+        y: args.y,
+        width: args.width,
+        height: args.height,
+        ...(args.fill === undefined ? {} : { fill: args.fill }),
+        ...(args.opacity === undefined ? {} : { opacity: args.opacity }),
+      })
+      await addShape(backend, file, page, shape, args.frameId, args.index)
+      return { id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_add_text',
+    description: 'Add a text layer inside a frame. x/y are page coordinates. Each explicit newline becomes a positioned line; keep width generous and use height to size the box.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Containing frame uuid from penpot_pages.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      name: { type: 'string', description: 'Layer name; default "Text".' },
+      x: { type: 'number', required: true, description: 'Page x coordinate.' },
+      y: { type: 'number', required: true, description: 'Page y coordinate.' },
+      width: { type: 'number', description: 'Text box width; default 320.' },
+      height: { type: 'number', description: 'Text box height; default is computed from lines and font size.' },
+      text: { type: 'string', required: true, description: 'Text content; newlines create paragraphs.' },
+      fontFamily: { type: 'string', description: 'Font family; default Inter.' },
+      fontSize: { type: 'number', description: 'Font size in px; default 14.' },
+      fontWeight: { type: 'number', description: 'Font weight; default 400.' },
+      lineHeight: { type: 'number', description: 'Line-height multiplier; default 1.4.' },
+      letterSpacing: { type: 'number', description: 'Letter spacing in px; default 0.' },
+      color: { type: 'string', description: 'Text color; default #111827.' },
+      align: { type: 'string', description: 'left, right, center or justify; default left.' },
+      index: { type: 'number', description: 'Insertion index in the frame; defaults to the end (top).' },
+    },
+    output: idOutput('created text'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const frame = page.objects[args.frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.frameId} is not on page ${page.id}`)
+      const id = randomUUID()
+      const shape = createText({
+        id,
+        name: args.name ?? 'Text',
+        pageId: page.id,
+        frameId: args.frameId,
+        x: args.x,
+        y: args.y,
+        width: args.width ?? 320,
+        ...(args.height === undefined ? {} : { height: args.height }),
+        text: args.text,
+        style: textStyleFrom(args),
+      })
+      await addShape(backend, file, page, shape, args.frameId, args.index)
+      return { id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_update_text',
+    description: 'Replace a text layer\'s copy and recompute its line layout and height. Keeps the first run\'s typography unless style parameters override it.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      shapeId: { type: 'string', required: true, description: 'Text shape uuid from penpot_find or penpot_outline.' },
+      text: { type: 'string', required: true, description: 'New text content.' },
+      width: { type: 'number', description: 'New box width; defaults to the current width.' },
+      height: { type: 'number', description: 'New box height; defaults to a computed height.' },
+      fontFamily: { type: 'string', description: 'Override font family.' },
+      fontSize: { type: 'number', description: 'Override font size in px.' },
+      fontWeight: { type: 'number', description: 'Override font weight.' },
+      lineHeight: { type: 'number', description: 'Override line-height multiplier.' },
+      letterSpacing: { type: 'number', description: 'Override letter spacing in px.' },
+      color: { type: 'string', description: 'Override text color.' },
+      align: { type: 'string', description: 'Override left, right, center or justify.' },
+    },
+    output: idOutput('updated text'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const found = locateShape(file, args.shapeId)
+      if (found === undefined) throw new Error(`shape ${args.shapeId} is not in file ${args.fileId}`)
+      if (found.shape.type !== 'text') throw new Error(`shape ${args.shapeId} is ${found.shape.type}, not text`)
+      const updated = updateTextShape(found.shape, args.text, textStyleFrom(args), {
+        ...(args.width === undefined ? {} : { width: args.width }),
+        ...(args.height === undefined ? {} : { height: args.height }),
+      })
+      const height = updated.height
+      const width = updated.width
+      const selrect = {
+        x: found.shape.x,
+        y: found.shape.y,
+        width,
+        height,
+        x1: found.shape.x,
+        y1: found.shape.y,
+        x2: found.shape.x + width,
+        y2: found.shape.y + height,
+      }
+      const points = [
+        { x: found.shape.x, y: found.shape.y },
+        { x: found.shape.x + width, y: found.shape.y },
+        { x: found.shape.x + width, y: found.shape.y + height },
+        { x: found.shape.x, y: found.shape.y + height },
+      ]
+      await backend.updateFile({
+        fileId: file.id,
+        revn: file.revn,
+        vern: file.vern,
+        changes: [{
+          type: 'mod-obj',
+          id: found.shape.id,
+          'page-id': found.page.id,
+          operations: [{
+            type: 'assign',
+            value: {
+              content: updated.content,
+              positionData: updated.positionData,
+              width,
+              height,
+              selrect,
+              points,
+            },
+          }],
+        }],
+      })
+      return { id: found.shape.id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_delete_shape',
+    description: 'Delete a layer, or a frame and its subtree. Take a snapshot first when the design matters; deletion is not undoable through this plugin.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      shapeId: { type: 'string', required: true, description: 'Shape or frame uuid to delete.' },
+    },
+    output: idOutput('deleted shape'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const found = locateShape(file, args.shapeId)
+      if (found === undefined) throw new Error(`shape ${args.shapeId} is not in file ${args.fileId}`)
+      if (found.shape.id === ROOT_ID) throw new Error('the page root cannot be deleted')
+      await backend.updateFile({
+        fileId: file.id,
+        revn: file.revn,
+        vern: file.vern,
+        changes: [{ type: 'del-obj', id: found.shape.id, 'page-id': found.page.id }],
+      })
+      return { id: found.shape.id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_create_comment_thread',
+    description: 'Create a comment thread anchored to a frame at a page-coordinate point. Use penpot_comments to read it back.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Frame the thread is anchored to.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      x: { type: 'number', required: true, description: 'Page x coordinate of the pin.' },
+      y: { type: 'number', required: true, description: 'Page y coordinate of the pin.' },
+      content: { type: 'string', required: true, description: 'Comment text.' },
+    },
+    output: idOutput('created comment thread'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const frame = page.objects[args.frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.frameId} is not on page ${page.id}`)
+      const result = await backend.createCommentThread({
+        fileId: file.id,
+        pageId: page.id,
+        frameId: args.frameId,
+        x: args.x,
+        y: args.y,
+        content: args.content,
+      })
+      return result
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_reply_comment',
+    description: 'Reply to an existing comment thread.',
+    parameters: {
+      threadId: { type: 'string', required: true, description: 'Thread uuid from penpot_comments.' },
+      content: { type: 'string', required: true, description: 'Reply text.' },
+    },
+    output: idOutput('created reply'),
+    async execute(args) {
+      const backend = requireBackend()
+      return await backend.createComment({ threadId: args.threadId, content: args.content })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_resolve_comment',
+    description: 'Mark a comment thread resolved or open.',
+    parameters: {
+      threadId: { type: 'string', required: true, description: 'Thread uuid from penpot_comments.' },
+      resolved: { type: 'boolean', description: 'true to resolve (default), false to reopen.' },
+    },
+    output: textOutput('Resolution result.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const resolved = args.resolved ?? true
+      await backend.setCommentThreadResolved({ threadId: args.threadId, resolved })
+      return { text: `${resolved ? 'resolved' : 'reopened'} comment thread ${args.threadId}` }
     },
   }))
 

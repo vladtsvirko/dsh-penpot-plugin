@@ -19,15 +19,15 @@ checked against a live deployment.
 | Layer search by name/text/type | covered | `penpot_find` |
 | Design-token library and used values | covered | `penpot_tokens` |
 | Accessibility / design QA | covered | `penpot_audit` |
-| Comment threads and replies | read | `penpot_comments` |
+| Comment threads and replies | read + write | `penpot_comments`, `penpot_create_comment_thread`, `penpot_reply_comment`, `penpot_resolve_comment` |
 | Version snapshots | read + create | `penpot_snapshots` |
 | Linked libraries | read | `penpot_libraries` |
 | Built-in templates | read + clone | `penpot_templates`, `penpot_clone_template` |
 | Create project/file | write | `penpot_create_project`, `penpot_create_file` |
 | Duplicate file | write | `penpot_duplicate_file` |
 | Whole-file export/import | write | `penpot_export`, `penpot_import` |
-| Shape-level writes | documented, not exposed | skill `references/write.md` |
-| Comment create/reply/resolve | not exposed | read-only by design |
+| Shape writes | frames, rects, circles, text, delete | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text`, `penpot_update_text`, `penpot_delete_shape` |
+| Advanced shape writes | documented | groups, paths, images, components via `update-file`; skill `references/write.md` |
 | Media / object thumbnail bytes | blocked by deployment | metadata only via `get-file-object-thumbnails` |
 | Per-frame PNG/SVG export | not in RPC | whole-file export only |
 | Components / variants / prototype flows | not exposed | open candidate |
@@ -37,22 +37,31 @@ checked against a live deployment.
 
 ### Shape writes
 
-`update-file` is the only write path for shapes, and it takes a change list
-against Penpot's full shape schema. We proved frames, rects, circles and text on
-2.18.6 (see the skill's `write.md`), but a general “add a shape” tool needs a
-reliable template per shape type, text layout, and a conflict policy. The
-current release keeps the read/analyse/manage surface honest and documents the
-write format instead of shipping a half-safe editor. The next release can add
-`add frame` / `add rect` / `add text` on top of the same backend seam.
+`update-file` is the only write path for shapes. The plugin builds the required
+shape core (identity, geometry, transform, parent links) and exposes frames,
+rectangles, circles, text creation, text replacement and deletion. The builders
+were validated against Penpot 2.18.6 with a real blank file: frame → rects/text →
+outline/audit → update copy → delete.
 
-### Comments are read-only
+The tools deliberately cover the primitives an agent needs to draw a screen.
+Groups, booleans, paths, images and component instances still require the raw
+change format; adding each needs a reliable schema/template and a component-heavy
+fixture. `update-file` remains the advanced escape hatch, documented in the
+skill.
 
-Reading feedback is safe and useful for a design agent. Creating or resolving a
-thread changes a human conversation; a tool should be explicit about that, and
-the plugin should not resolve feedback without the user asking. The RPC commands
-exist (`create-comment-thread`, `create-comment`, `update-comment`,
-`update-comment-thread`, `update-comment-thread-status`) and are a straightforward
-follow-up.
+### Comments write
+
+Reading, creating, replying and resolving are exposed. The design decision is
+confirmation: a reply is a message to a human, and resolving a thread closes
+feedback. Keep those actions explicit. Editing or deleting an individual comment
+is not exposed.
+
+### Text layout
+
+`penpot_add_text` and `penpot_update_text` create one `positionData` line per
+explicit newline and compute the box height. They do **not** measure wrapped
+text. A very long line stays in one layout box; keep the width generous or split
+the copy. This is the main fidelity limit of the current writer.
 
 ### Media and thumbnails
 
@@ -117,11 +126,9 @@ The 2.18.6 RPC has 150 commands. Grouped by area:
 
 ## Candidate next steps
 
-1. **Shape writes** — `penpot_add_frame`, `penpot_add_rect`, `penpot_add_text`,
-   `penpot_update_text`; template cloning from the target file, absolute
-   coordinate conversion, `positionData`, `revn` retry, snapshot before batch.
-2. **Comment write** — reply and resolve, with an explicit user confirmation
-   pattern.
+1. **Wrapped text metrics** — measure text width server-side or accept a line
+   width/height and wrap explicitly.
+2. **More shape primitives** — groups, paths, images and component instances.
 3. **Components** — list components/variants/instances and their usage.
 4. **Prototype flows** — read start points and connections.
 5. **Media download** — once the deployment proxies `/assets/by-id/`; return a

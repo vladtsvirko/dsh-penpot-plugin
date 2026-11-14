@@ -55,11 +55,17 @@ describe('plugin surface', () => {
 
   it('always registers the same tool surface, configured or not', () => {
     expect([...register().keys()].sort()).toEqual([
+      'penpot_add_circle',
+      'penpot_add_frame',
+      'penpot_add_rect',
+      'penpot_add_text',
       'penpot_audit',
       'penpot_clone_template',
       'penpot_comments',
+      'penpot_create_comment_thread',
       'penpot_create_file',
       'penpot_create_project',
+      'penpot_delete_shape',
       'penpot_duplicate_file',
       'penpot_export',
       'penpot_file',
@@ -70,12 +76,15 @@ describe('plugin surface', () => {
       'penpot_outline',
       'penpot_pages',
       'penpot_projects',
+      'penpot_reply_comment',
+      'penpot_resolve_comment',
       'penpot_search',
       'penpot_snapshots',
       'penpot_status',
       'penpot_teams',
       'penpot_templates',
       'penpot_tokens',
+      'penpot_update_text',
     ])
   })
 

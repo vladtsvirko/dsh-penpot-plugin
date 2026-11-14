@@ -69,6 +69,26 @@ is cheap safety.
 | `get-builtin-templates` | `{}` | `id`, `name` |
 | `clone-template` | `{"project-id","template-id"}` | SSE; end event is a vector with the new file id |
 
+### Shape and text writes
+
+| Command | Body | Notes |
+|---|---|---|
+| `update-file` | `{"id","session-id","revn","vern","changes"}` | apply add/mod/del changes; see `write.md` |
+| `get-page` | `{"file-id","page-id"}` | read the page before building changes |
+
+`update-file` answers with the applied changes. A stale `revn` is normally a
+base revision; a mismatched `vern` is a conflict. Use a fresh random
+`session-id` per request.
+
+### Comment writes
+
+| Command | Body | Returns |
+|---|---|---|
+| `create-comment-thread` | `{"file-id","page-id","frame-id","position":{x,y},"content"}` | thread with `id` |
+| `create-comment` | `{"thread-id","content"}` | comment with `id` |
+| `update-comment-thread` | `{"id","is-resolved":true|false}` | 204; then read threads |
+| `update-comment` | `{"id","content"}` | edit an existing comment |
+
 ### File management
 
 | Command | Body | Returns |

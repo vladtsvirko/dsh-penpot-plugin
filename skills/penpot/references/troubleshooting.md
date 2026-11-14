@@ -57,6 +57,19 @@ Penpot origin; a presigned third-party URL must not receive it. If a proxy
 rewrites the URL to a different origin, decide deliberately whether to forward
 the token.
 
+## `update-file` 400 or 500
+
+- `params-validation` on `add-obj` usually means the shape map is incomplete:
+  `id`, `name`, `type`, `x/y/width/height`, `selrect`, `points`, `transform`,
+  `transform-inverse`, `parent-id` and `frame-id` are mandatory, and a frame
+  also needs `shapes`.
+- A 500 `invalid shape found … :selrect` usually means a `mod-obj` `set` on a
+  compound attribute. Use `assign` for geometry and `content`/`positionData`.
+- A `vern-conflict` means the file's restore counter moved; re-read and retry.
+  A `revn-conflict` means the incoming revision is greater than the stored one.
+- The plugin's add tools build the required core; prefer them for frames,
+  rectangles, circles and text.
+
 ## Blank or missing text after a write
 
 A text shape can exist in the data and be invisible when it has no

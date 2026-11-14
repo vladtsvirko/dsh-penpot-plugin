@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.6.0
+
+- **The agent can draw.** `penpot_add_frame`, `penpot_add_rect`,
+  `penpot_add_circle` and `penpot_add_text` create real Penpot shapes through
+  `update-file`. The tools build the required shape core (id, geometry,
+  transform, parent/frame links), solid fills, corner radii and text content.
+- **The agent can iterate copy.** `penpot_update_text` replaces a text layer's
+  copy, keeps its first-run typography unless overridden, and recomputes its
+  `positionData` and height. `penpot_delete_shape` removes a layer or a frame
+  subtree.
+- **The agent can write feedback.** `penpot_create_comment_thread`,
+  `penpot_reply_comment` and `penpot_resolve_comment` complete the comment
+  loop that started as read-only in 0.5.0.
+- **Coordinates are page coordinates.** The add tools match `penpot_outline`:
+  a child 24px inside a frame at `x=430` is added at `x=454`. Text creates one
+  positioned line per explicit newline and computes its box height; wrapped
+  text is still laid out by Penpot, not measured by the tool.
+- **Validated on a blank file.** A new file was created, a frame, header, title,
+  body, card, avatar, button and centered label were added, `outline`/`audit`
+  read them back, the title was updated at a new font size, a trial rectangle
+  was deleted, and a comment thread was created, replied to and resolved. The
+  demo lives in the **Agent drawing demo** file in the test project.
+- **Backend.** One `updateFile` method generates a fresh `session-id` and sends
+  the changes at the current `revn`/`vern`. Comment write methods use
+  `create-comment-thread`, `create-comment` and `update-comment-thread`.
+- **Skill updated.** `skills/penpot/SKILL.md` now maps the write tools and has a
+  “Draw a screen” workflow; `references/write.md` documents the raw change map
+  for groups, paths, images and components. The shipped skill still installs
+  with the package.
+- 30 tools total. Tests: shape builders, `update-file` envelope, comment writes
+  and the existing read/analysis suite. 35 tests pass.
+- Known limits: text wrapping is not measured; per-frame PNG/SVG export is not
+  an RPC capability; media/thumbnail bytes still need the deployment to proxy
+  `/assets/by-id/`; groups, paths, images and component instances remain raw
+  `update-file` work.
+
 ## 0.5.0
 
 - **Inspect a design, not just its name.** `penpot_pages`, `penpot_outline`,

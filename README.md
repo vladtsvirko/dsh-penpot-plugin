@@ -1,9 +1,9 @@
 # dsh-penpot-plugin
 
 Penpot for [DeepSeek Harness](https://github.com/deepseek-ai): discover and
-inspect design files, extract tokens, audit accessibility, read feedback, manage
-versions and files, and export or import `.penpot` archives over Penpot's HTTP
-RPC API.
+inspect design files, extract tokens, audit accessibility, draw frames and text,
+read and write feedback, manage versions and files, and export or import
+`.penpot` archives over Penpot's HTTP RPC API.
 
 The plugin is a normal DSH bundle. It talks to a Penpot instance you run
 (2.18.6 is the tested version) and needs an API origin and an access token;
@@ -11,16 +11,16 @@ nothing else.
 
 It also ships a **Penpot skill** (`skills/penpot/`) that the Host registers on
 `ctx.skills`, so the agent gets the workflow and the RPC/shape knowledge without
-a second install. Shape-level writes through Penpot's `update-file` format are
-not exposed as tools yet; the change format and safe recipes are in the skill's
-`references/write.md`.
+a second install. The shape write tools cover frames, rectangles, circles, text
+and deletion; the raw `update-file` format for groups, paths, images and
+component instances is in the skill's `references/write.md`.
 
 ## Install
 
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.5.0
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.6.0
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -35,7 +35,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.5.0
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.6.0
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -96,6 +96,15 @@ names the endpoint, and a missing value is reported by name.
 | `penpot_create_file` | create an empty file |
 | `penpot_duplicate_file` | duplicate a file as a baseline |
 | `penpot_clone_template` | clone a built-in template into a project |
+| `penpot_add_frame` | create a top-level frame/artboard |
+| `penpot_add_rect` | add a rectangle inside a frame |
+| `penpot_add_circle` | add a circle/ellipse inside a frame |
+| `penpot_add_text` | add a text layer with typography and color |
+| `penpot_update_text` | replace a text layer's copy and re-layout it |
+| `penpot_delete_shape` | delete a layer or a frame subtree |
+| `penpot_create_comment_thread` | start a comment thread on a frame |
+| `penpot_reply_comment` | reply to a thread |
+| `penpot_resolve_comment` | resolve or reopen a thread |
 | `penpot_export` | write a `.penpot` file to disk |
 | `penpot_import` | upload a `.penpot` file as a new or replacement file |
 
@@ -108,6 +117,13 @@ whole file: pages and the design-token library are file-level data.
 themes, aliases) and the colors, typography and radii actually used on a page.
 `format: "css"` resolves Penpot math expressions such as `8*1.25` into usable
 `px` values.
+
+Shape writes take **page coordinates**, matching `penpot_outline`: if a frame is
+at `x=430`, a child 24px inside it is `x=454`. `penpot_add_text` creates one
+positioned line per explicit newline and computes the box height, but does not
+measure wrapped text; keep the box wide enough. Take a snapshot before a batch
+or a delete. The add tools return the new shape id; use `penpot_outline` on the
+frame to verify.
 
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file
 tools, then import it back with `penpot_import` — no extra CLI and no second
@@ -145,7 +161,8 @@ One backend: Penpot's HTTP RPC.
   `get-page`, `get-comment-threads`/`get-comments`, `get-file-snapshots`,
   `get-file-libraries`, `get-builtin-templates`. Write: `create-project`,
   `create-file`, `duplicate-file`, `clone-template`, `create-file-snapshot`,
-  `export-binfile`, `import-binfile`.
+  `update-file`, `create-comment-thread`, `create-comment`,
+  `update-comment-thread`, `export-binfile`, `import-binfile`.
 - Configuration is `apiUrl` + `token`. If either is empty the plugin still
   loads, and `penpot_status` says `none` while the other tools explain what to
   set.

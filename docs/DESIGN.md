@@ -31,6 +31,9 @@ payloads.
   reads the DTCG token library, resolves aliases, formats outlines and runs the
   contrast/typography audit. That keeps it testable with a fixture and reusable
   if the transport changes.
+- `shapes.ts` builds the minimal valid Penpot shape maps for frames, rectangles,
+  circles and text, plus the rich-text/`positionData` layout. The tools apply
+  them through one `update-file` change per call.
 - `skill.ts` registers `skills/penpot/` on `ctx.skills`; the skill is part of the
   npm package and needs no profile entry.
 - A missing API URL or token (from the Plugins page or the
@@ -48,13 +51,12 @@ leave the host.
 
 ## Open questions
 
-1. **Shape writes as tools.** The `update-file` format is documented and proven
-   on 2.18.6 (frames, rects, circles, text), but not exposed yet. The pragmatic
-   path is shape-by-shape with a template from the target file, absolute
-   coordinates, `positionData` for text, and `revn` retry. A batch “draw a
-   screen” tool would hide too many failure modes before the primitives exist.
-2. **Comments write.** Reply/resolve are one RPC each; the design decision is
-   the confirmation UX, not the transport.
+1. **Text metrics.** The writer lays out explicit newlines but does not measure
+   wrapping. A wrapped line can overflow its box; a future version should either
+   request line breaks from the caller or measure with a font-aware layout.
+2. **Advanced primitives.** Groups, booleans, paths, images and component
+   instances still require the raw `update-file` format. Add them only with a
+   schema/template and a fixture.
 3. **Components and prototype flows.** `get-file` carries them, but the 2.18.6
    test files did not exercise the schema; add only after a component-heavy
    fixture exists.

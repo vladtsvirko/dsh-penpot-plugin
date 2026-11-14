@@ -130,6 +130,38 @@ describe('api backend', () => {
     expect(calls.at(-1)?.url).toBe('/api/rpc/command/get-file-summary')
   })
 
+  it('writes through update-file with a session id', async () => {
+    const base = await start((_call, response) => json(response, []))
+    const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+    const changes = [{ type: 'add-obj', id: 'shape-1' }]
+    expect(await backend.updateFile({ fileId: 'file-1', revn: 4, vern: 1, changes })).toEqual([])
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(calls[0]?.url).toBe('/api/rpc/command/update-file')
+    expect(body).toMatchObject({ id: 'file-1', revn: 4, vern: 1, changes })
+    expect(body['session-id']).toMatch(/^[0-9a-f-]{36}$/u)
+  })
+
+  it('creates, replies to and resolves comment threads', async () => {
+    const base = await start((call, response) => {
+      if (call.url.includes('create-comment-thread')) {
+        json(response, { id: 'thread-1' })
+        return
+      }
+      if (call.url.includes('create-comment')) {
+        json(response, { id: 'comment-1' })
+        return
+      }
+      response.writeHead(204)
+      response.end()
+    })
+    const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+    expect(await backend.createCommentThread({ fileId: 'file-1', pageId: 'page-1', frameId: 'frame-1', x: 10, y: 20, content: 'Review this' })).toEqual({ id: 'thread-1' })
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ 'file-id': 'file-1', 'page-id': 'page-1', 'frame-id': 'frame-1', position: { x: 10, y: 20 }, content: 'Review this' })
+    expect(await backend.createComment({ threadId: 'thread-1', content: 'Done' })).toEqual({ id: 'comment-1' })
+    await backend.setCommentThreadResolved({ threadId: 'thread-1', resolved: true })
+    expect(JSON.parse(calls[2]?.body ?? '{}')).toEqual({ id: 'thread-1', 'is-resolved': true })
+  })
+
   it('reads the SSE export URL and the SSE import id', async () => {
     let downloadUrl = ''
     const base = await start((call, response) => {

@@ -155,6 +155,26 @@ export interface PenpotBackend {
   createFile(input: { projectId: string; name: string }): Promise<PenpotRef>
   /** Duplicate a file in its current project/team. */
   duplicateFile(input: { fileId: string; name?: string }): Promise<PenpotRef>
+  /** Apply Penpot `update-file` changes against the current revision. */
+  updateFile(input: {
+    fileId: string
+    revn: number
+    vern: number
+    changes: Array<Record<string, unknown>>
+  }): Promise<unknown>
+  /** Create a comment thread anchored to a frame. */
+  createCommentThread(input: {
+    fileId: string
+    pageId: string
+    frameId: string
+    x: number
+    y: number
+    content: string
+  }): Promise<{ id: string }>
+  /** Reply to an existing comment thread. */
+  createComment(input: { threadId: string; content: string }): Promise<{ id: string }>
+  /** Mark a comment thread resolved or open. */
+  setCommentThreadResolved(input: { threadId: string; resolved: boolean }): Promise<void>
   /** Clone a built-in template into a project; some templates produce several files. */
   cloneTemplate(input: { projectId: string; templateId: string }): Promise<PenpotRef[]>
   /** Whole-file export as `.penpot` bytes. */

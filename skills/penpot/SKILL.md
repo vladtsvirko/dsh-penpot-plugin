@@ -1,6 +1,6 @@
 ---
 name: penpot
-description: Use when working with Penpot design files through DeepSeek Harness: inspect pages and layers, extract design tokens, audit accessibility, read comments, manage versions and files, or export and import .penpot files.
+description: Use when working with Penpot design files through DeepSeek Harness: inspect pages and layers, extract design tokens, audit accessibility, create or edit frames and text, read and write comments, manage versions and files, or export and import .penpot files.
 ---
 
 # Penpot
@@ -40,6 +40,10 @@ usually means by “screen”.
 | Version history | `penpot_snapshots` |
 | Linked design systems | `penpot_libraries` |
 | Create a project / file | `penpot_create_project`, `penpot_create_file` |
+| Draw a frame / rect / circle / text | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text` |
+| Change copy in place | `penpot_update_text` |
+| Delete a layer or subtree | `penpot_delete_shape` |
+| Start a comment, reply, resolve | `penpot_create_comment_thread`, `penpot_reply_comment`, `penpot_resolve_comment` |
 | Duplicate a baseline | `penpot_duplicate_file` |
 | Start from a template | `penpot_templates`, `penpot_clone_template` |
 | Whole-file backup / restore | `penpot_export`, `penpot_import` |
@@ -49,10 +53,14 @@ usually means by “screen”.
 - **Read before writing.** `penpot_pages` and `penpot_outline` are cheap compared
   with guessing a frame id or a layout.
 - **Pages, frames, coordinates.** Penpot stores child shapes in absolute page
-  coordinates. A tool that reports a child at `x=478` means the page coordinate,
-  not the frame-local one. When you create shapes through `update-file`, convert
-  frame-local intent to absolute coordinates; see
-  `references/shapes.md`.
+  coordinates. The add tools also take page coordinates. If a frame is at
+  `x=430` and the child should be 24px inside it, pass `x=454`, not `24`.
+- **Write in small steps.** Create a frame, then its children, then re-read with
+  `penpot_outline`. Snapshot before a batch or a delete; `penpot_delete_shape`
+  is not undoable through this plugin.
+- **Text is positioned explicitly.** `penpot_add_text` creates one positioned
+  line per explicit newline and computes the box height. Keep the width generous;
+  wrapping inside a line is left to Penpot, not recalculated by the tool.
 - **Text is a rich-text tree.** `shape.content` is not a string. `penpot_outline`
   already extracts it; for raw JSON use the recursion in
   `references/shapes.md`.
@@ -86,10 +94,25 @@ See `references/design-to-code.md` for a mapping checklist.
 `penpot_audit` first, then `penpot_outline` on the flagged frames. Report the
 rule, the measured value and the layer id; do not silently change the design.
 
+### Draw a screen
+1. `penpot_create_file` (or pick an existing file and `penpot_pages`).
+2. `penpot_add_frame` at the page origin; keep its id.
+3. `penpot_add_rect` for header/card/button surfaces; coordinates are page
+   coordinates, so add the frame's `x`/`y` to the intended inside position.
+4. `penpot_add_text` for copy; pass `fontSize`, `fontWeight`, `color`, `align`.
+5. `penpot_add_circle` for avatars or decorative dots.
+6. `penpot_outline` with `rootId` = frame id, then `penpot_audit`.
+7. Fix copy with `penpot_update_text`; remove a trial layer with
+   `penpot_delete_shape`.
+
+A rectangle added after text sits on top; use `index` to control stacking
+(`0` is the bottom) or add backgrounds first.
+
 ### Address feedback
 `penpot_comments` lists threads. Pass a `threadId` to read replies; use the
 `frameId` and `position` to locate the area, and `penpot_find` to identify the
-layer. Resolve the design question before editing.
+layer. Reply with `penpot_reply_comment`; mark it resolved with
+`penpot_resolve_comment` once the design question is settled.
 
 ### Create or copy a design
 - `penpot_create_project` → `penpot_create_file` for a blank file.
@@ -114,9 +137,11 @@ not proxy that route, the export fails after Penpot answers 200. See
   builds return no `pages` array from `get-file-summary`.
 - A large file makes `get-file` expensive. Prefer tools that accept `pageId`
   (`penpot_outline`, `penpot_find`, `penpot_audit`).
-- The plugin does not yet expose shape-level write tools. The `update-file`
-  change format is documented in `references/write.md` for a plugin or script
-  that needs to create or modify shapes.
+- Shape writes cover **frames, rectangles, circles, text and delete**. Groups,
+  booleans, paths, images and component instances need the raw `update-file`
+  format; see `references/write.md`.
+- Comment write covers thread creation, replies and resolve. Editing an existing
+  comment is not exposed.
 - This skill documents Penpot 2.x RPC behavior, tested with 2.18.6. A shape or
   command change is a compatibility event; widen testing or cut a release.
 
