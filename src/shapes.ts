@@ -266,8 +266,10 @@ export function createCircle(input: {
 
 /** Resolve optional text style values. */
 export function resolveTextStyle(style: TextStyle = {}): ResolvedTextStyle {
+  const requestedFamily = (style.fontFamily ?? 'sourcesanspro').trim()
+  const fontFamily = /^source sans pro$/iu.test(requestedFamily) ? 'sourcesanspro' : requestedFamily
   return {
-    fontFamily: style.fontFamily ?? 'Source Sans Pro',
+    fontFamily,
     fontSize: style.fontSize ?? 14,
     fontWeight: style.fontWeight ?? 400,
     lineHeight: style.lineHeight ?? 1.4,

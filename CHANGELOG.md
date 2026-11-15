@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.2
+
+- **Built-in font family was still wrong.** Penpot’s built-in font is
+  `sourcesanspro`; its CSS family is `sourcesanspro`, while “Source Sans Pro” is
+  only the display name. 0.10.1 wrote the display name into `content`, so the
+  fallback renderer could not resolve it and used a serif fallback. The tool now
+  normalizes `Source Sans Pro` to `sourcesanspro` and defaults to it.
+- The Pulse demo was re-laid out again with `fontFamily`/`fontId`
+  `sourcesanspro`; refresh the Penpot tab to see it.
+- 0.10.1’s baseline/line-width fix is unchanged. 44 tools, 41 tests.
+- If a future deployment disables or lacks Source Sans Pro, pass a custom
+  `fontFamily`/font id from the target file; the plugin does not invent a font.
+
 ## 0.10.1
 
 - **Text now lays out where Penpot expects it.** The generated `positionData`

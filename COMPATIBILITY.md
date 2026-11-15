@@ -6,6 +6,7 @@ releases; every row states what was actually exercised.
 
 | Plugin | DSH | Penpot | Status | Notes |
 |---|---|---|---|---|
+| 0.10.2 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live data corrected to built-in `sourcesanspro`; Pulse demo re-laid; font-family resolution checked against Penpot's `local-fonts` source | patch for 0.10.1 font family: display name vs CSS family; baseline fix included |
 | 0.10.1 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live: text layout corrected against Penpot's real positionData; Pulse demo re-rendered; 0.10.0 features retested by the demo | patch for 0.10.0 text baseline/line width and default font (Source Sans Pro); 44 tools, 41 tests |
 | 0.10.0 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live: wrapped text, local image upload, group/ungroup, components list/inspect, flow+interaction, frame SVG and headless Chrome PNG, comment edit/delete; asset download blocked by known proxy gap | final pre-1.0 release; 44 tools; approximate text metrics; user-configured headless browser for PNG; paths/booleans/component creation still raw `update-file` |
 | 0.6.1 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live update-shape: fill, radius, name, opacity, text move, frame+child move, delete; 0.6.0 draw/comment suite | adds `penpot_update_shape`; frame move shifts descendants, resize does not; export/media still need `/assets/by-id` proxy |

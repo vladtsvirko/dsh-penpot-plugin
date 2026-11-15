@@ -1199,7 +1199,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       width: { type: 'number', description: 'Text box width; default 320.' },
       height: { type: 'number', description: 'Text box height; default is computed from lines and font size.' },
       text: { type: 'string', required: true, description: 'Text content; newlines create paragraphs.' },
-      fontFamily: { type: 'string', description: 'Font family; default Source Sans Pro.' },
+      fontFamily: { type: 'string', description: 'Font family; default sourcesanspro (Penpot\'s built-in Source Sans Pro).' },
       fontSize: { type: 'number', description: 'Font size in px; default 14.' },
       fontWeight: { type: 'number', description: 'Font weight; default 400.' },
       lineHeight: { type: 'number', description: 'Line-height multiplier; default 1.4.' },
