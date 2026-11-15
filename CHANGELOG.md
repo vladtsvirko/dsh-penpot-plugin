@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.1
+
+- **Text now lays out where Penpot expects it.** The generated `positionData`
+  used a baseline near the top of the box. Penpot renders `positionData.y` as a
+  text baseline, so glyphs extended upward and overlapped the layer above; the
+  plugin's SVG preview looked acceptable while Penpot looked broken. The
+  baseline is now the bottom of each line box minus a small descent, matching
+  the real shapes in the test file.
+- **Line boxes now use the line's own left edge and width.** For centered and
+  right-aligned text, `positionData.x` is the line's left edge and `width` is the
+  measured line width, not the whole text box. The SVG renderer follows the same
+  rule.
+- **The default font is Source Sans Pro**, Penpot's built-in default, with
+  `fontId` `sourcesanspro`. A self-hosted Penpot that cannot load a Google font
+  no longer falls back to a serif font for every generated text layer. Pass
+  `fontFamily` to override; Inter remains available as `gfont-inter`.
+- **The Pulse demo was re-laid out with the fix.** The previews and the Penpot
+  data now use the corrected baselines and the built-in font.
+- 44 tools, 41 tests. The preview renderer and the text builder share the same
+  line-edge/ baseline interpretation.
+
 ## 0.10.0
 
 This is the final pre-1.0 release. 1.0.0 is cut after user testing.

@@ -64,7 +64,8 @@ describe('shape builders', () => {
     expect(content.children[0]?.children[0]?.children[0]?.text).toBe('Hello')
     expect(content.children[0]?.children[1]?.children[0]?.text).toBe('World')
     expect(text.positionData).toHaveLength(2)
-    expect(text.positionData?.[0]).toMatchObject({ x: 24, y: 108.8, width: 342, fontSize: '24px', text: 'Hello' })
+    expect(text.positionData?.[0]).toMatchObject({ x: 24, y: 134, fontSize: '24px', text: 'Hello' })
+    expect(text.positionData?.[0]?.width).toBeGreaterThan(0)
     expect(text.height).toBe(textBoxHeight('Hello\nWorld', { fontSize: 24 }))
   })
 
@@ -111,6 +112,8 @@ describe('shape builders', () => {
   it('builds content without a shape wrapper', () => {
     const { content, positionData } = buildTextContent('One line', { fontSize: 14 }, { x: 10, y: 20, width: 300, height: 24 })
     expect(content).toMatchObject({ type: 'root' })
-    expect(positionData[0]).toMatchObject({ x: 10, y: 22.8, width: 300, text: 'One line' })
+    expect(positionData[0]).toMatchObject({ x: 10, text: 'One line' })
+    expect(positionData[0]?.y).toBeCloseTo(37.5)
+    expect(positionData[0]?.width).toBeGreaterThan(0)
   })
 })

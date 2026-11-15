@@ -64,9 +64,11 @@ are exposed as explicit tools.
 
 `penpot_add_text` and `penpot_update_text` use an approximate glyph metric and
 greedy word wrapping (`wrap: true`, the default). Each line gets a
-`positionData` entry; `wrap: false` keeps explicit lines. The metric is an
-estimate, not Penpot's font layout: unusual fonts, ligatures and very long words
-can still differ. This is documented as a fidelity limit, not a silent promise.
+`positionData` entry with the line's left edge, measured width and baseline near
+the line bottom; `wrap: false` keeps explicit lines. The default font is
+Penpot's built-in Source Sans Pro so a self-hosted deployment without Google
+Fonts does not fall back to serif. The metric is an estimate: unusual fonts,
+ligatures and very long words can still differ.
 
 ### Media and thumbnails
 

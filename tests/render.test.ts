@@ -27,7 +27,7 @@ describe('frame SVG renderer', () => {
     expect(render.height).toBe(844)
     expect(render.svg).toContain('<rect x="24" y="100" width="342" height="132"')
     expect(render.svg).toContain('<ellipse cx="204" cy="426"')
-    expect(render.svg).toContain('text-anchor="middle"')
+    expect(render.svg).toContain('text-anchor="start"')
     expect(render.svg).toContain('>Continue</text>')
     expect(render.limitations.some((item) => item.includes('image'))).toBe(true)
   })

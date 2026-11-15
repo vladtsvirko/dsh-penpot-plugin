@@ -122,11 +122,10 @@ export function renderFrameSvg(page: PenpotPage, frameId: string): FrameRender {
           const fill = Array.isArray(record['fills']) && record['fills'][0] !== undefined
             ? String((record['fills'][0] as Record<string, unknown>)['fillColor'] ?? first?.fillColor ?? '#111827')
             : first?.fillColor ?? '#111827'
-          const anchor = textAnchor(record['textAlign'])
-          const boxX = number(record['x']) - offsetX
-          const boxWidth = number(record['width'], shape.width)
-          const textX = anchor === 'middle' ? boxX + boxWidth / 2 : anchor === 'end' ? boxX + boxWidth : boxX
-          body.push(`${indent}  <text x="${String(textX)}" y="${String(number(record['y']) - offsetY)}" font-family="${escapeXml(fontStack(fontFamily))}" font-size="${String(fontSize)}" font-weight="${String(fontWeight)}" fill="${escapeXml(fill)}" text-anchor="${anchor}">${escapeXml(text)}</text>`)
+          // positionData.x is already the line's left edge, regardless of
+          // text alignment; render it as a start-anchored line.
+          const textX = number(record['x']) - offsetX
+          body.push(`${indent}  <text x="${String(textX)}" y="${String(number(record['y']) - offsetY)}" font-family="${escapeXml(fontStack(fontFamily))}" font-size="${String(fontSize)}" font-weight="${String(fontWeight)}" fill="${escapeXml(fill)}" text-anchor="start">${escapeXml(text)}</text>`)
         }
       } else if (first !== undefined) {
         const text = shapeText(shape)

@@ -116,9 +116,17 @@ can exist in the data and render blank. Add at least one entry:
 }
 ```
 
-`positionData.y` is baseline/layout based, not a simple top edge. Do not use its
-vertical extent to decide whether text overflows a box; width is the reliable
-axis.
+`positionData` is **per line**, not per box:
+
+- `x` is the line's left edge, even when the text is centered or right-aligned;
+- `y` is the **baseline**, near the bottom of the line box (`shape.y + (i+1) *
+  lineHeight - fontSize * 0.15`);
+- `width` is the measured line width, not the whole text-box width;
+- `height` is the line height.
+
+Putting `y` near the top makes text overlap the layer above in Penpot, even if a
+custom renderer happens to look right. Do not use vertical extent to decide text
+overflow; width is the reliable axis.
 
 ## Fills and strokes
 

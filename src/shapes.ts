@@ -267,7 +267,7 @@ export function createCircle(input: {
 /** Resolve optional text style values. */
 export function resolveTextStyle(style: TextStyle = {}): ResolvedTextStyle {
   return {
-    fontFamily: style.fontFamily ?? 'Inter',
+    fontFamily: style.fontFamily ?? 'Source Sans Pro',
     fontSize: style.fontSize ?? 14,
     fontWeight: style.fontWeight ?? 400,
     lineHeight: style.lineHeight ?? 1.4,
@@ -357,7 +357,7 @@ export function textBoxHeight(text: string, style: TextStyle = {}, width = 320, 
   const lines = wrap
     ? paragraphs.reduce((count, paragraph) => count + wrapText(paragraph, width, resolved).length, 0)
     : Math.max(1, paragraphs.length)
-  return Math.ceil(lines * resolved.fontSize * resolved.lineHeight + resolved.fontSize * 0.4)
+  return Math.ceil(lines * resolved.fontSize * resolved.lineHeight + resolved.fontSize * 0.1)
 }
 
 /**
@@ -374,7 +374,12 @@ export function buildTextContent(
   const resolved = resolveTextStyle(style)
   const paragraphs = text.split(/\r?\n/u)
   const lineHeight = resolved.fontSize * resolved.lineHeight
-  const fontId = `gfont-${resolved.fontFamily.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '')}`
+  const normalizedFamily = resolved.fontFamily.replace(/^['"]|['"]$/gu, '').trim().toLowerCase()
+  const fontId = normalizedFamily === 'source sans pro' || normalizedFamily === 'sourcesanspro'
+    ? 'sourcesanspro'
+    : normalizedFamily === 'inter'
+      ? 'gfont-inter'
+      : `gfont-${normalizedFamily.replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '')}`
   const spanStyle = {
     fontFamily: resolved.fontFamily,
     fontId,
@@ -390,6 +395,7 @@ export function buildTextContent(
     fills: [solid(resolved.color)],
   }
   const content = {
+    verticalAlign: 'top',
     type: 'root',
     children: [{
       type: 'paragraph-set',
@@ -398,25 +404,36 @@ export function buildTextContent(
         ...spanStyle,
         textAlign: resolved.textAlign,
         direction: 'ltr',
-        children: [{ text: paragraph, ...spanStyle }],
+        children: [{ text: paragraph, ...spanStyle, textAlign: resolved.textAlign }],
       })),
     }],
   }
   const lines = paragraphs.flatMap((paragraph) => wrap ? wrapText(paragraph, input.width, resolved) : [paragraph])
-  const positionData = lines.map((line, index) => ({
-    x: input.x,
-    y: input.y + resolved.fontSize * 0.2 + index * lineHeight,
-    width: input.width,
-    height: lineHeight,
-    x1: 0,
-    y1: 0,
-    x2: input.width,
-    y2: lineHeight,
-    ...spanStyle,
-    fontSize: `${String(resolved.fontSize)}px`,
-    textAlign: resolved.textAlign,
-    text: line,
-  }))
+  const positionData = lines.map((line, index) => {
+    const lineWidth = Math.min(input.width, measureTextWidth(line, resolved))
+    const x = resolved.textAlign === 'center'
+      ? input.x + (input.width - lineWidth) / 2
+      : resolved.textAlign === 'right'
+        ? input.x + input.width - lineWidth
+        : input.x
+    return {
+      // Penpot's positionData uses a per-line left edge and baseline. The
+      // baseline is the bottom of the line box minus a small descent; putting
+      // it near the top makes text overlap the layer above.
+      x,
+      y: input.y + (index + 1) * lineHeight - resolved.fontSize * 0.15,
+      width: lineWidth,
+      height: lineHeight,
+      x1: 0,
+      y1: 0,
+      x2: lineWidth,
+      y2: lineHeight,
+      ...spanStyle,
+      fontSize: `${String(resolved.fontSize)}px`,
+      textAlign: resolved.textAlign,
+      text: line,
+    }
+  })
   return { content, positionData }
 }
 

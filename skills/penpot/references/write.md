@@ -151,13 +151,15 @@ Re-register shapes after low-level changes so Penpot recomputes derived data:
 1. Clone an existing text shape, or build the full map from a known-good one.
 2. Set `content` to a rich-text tree (root → paragraph-set → paragraph → span)
    and `positionData` to at least one laid-out line.
-3. `positionData` `x`/`y` are page coordinates; `y` is baseline-based. Use the
-   shape's `x` and `y + fontSize * 0.2` as a practical starting point; set
-   `width`/`height`/`x1`/`x2`/`y1`/`y2` consistently.
+3. `positionData` is per line: `x` is the line's left edge (not the box edge),
+   `y` is the baseline near the line bottom, and `width` is the measured line
+   width. Use `y = shape.y + (i+1) * fontSize * lineHeight - fontSize * 0.15`.
+   A top-of-box y makes Penpot draw glyphs upward over the layer above.
 4. Fill both the span and the shape's `positionData` with the same font and
-   color. `penpot_add_text` infers a Google-font `fontId` (`gfont-inter`, …)
-   from the family; for a custom font, copy the `fontId`/`fontVariantId` from
-   an existing text layer.
+   color. The default is Penpot's built-in Source Sans Pro (`fontId`
+   `sourcesanspro`); Inter maps to `gfont-inter` when the deployment can load
+   Google fonts. For a custom font, copy `fontId`/`fontVariantId` from an
+   existing text layer.
 5. `add-obj`, then read the page and confirm `positionData.length > 0`. A text
    object with no `positionData` can be invisible even though it exists.
 

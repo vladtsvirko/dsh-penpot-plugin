@@ -22,7 +22,7 @@ skill's `references/write.md`.
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.10.0
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.10.1
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -37,7 +37,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.10.0
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.10.1
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
