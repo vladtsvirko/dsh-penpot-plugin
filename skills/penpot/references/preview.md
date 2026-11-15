@@ -7,7 +7,7 @@ different fidelity:
 |---|---|---|
 | `penpot_frame_svg` | nothing extra | best-effort SVG |
 | `penpot_frame_png` | `browserPath` in the row config | PNG rendered by that browser |
-| `penpot_native_png` | Penpot email/password in the PNG-export group | Penpot's own exporter (exact) |
+| `penpot_native_png` | browserPath + Penpot email/password | Penpot's own render page (exact) |
 
 The first two do not use Penpot's renderer. The native path does; it is the
 opt-in exact option.
@@ -60,15 +60,21 @@ The browser is also a trust boundary: only configure a binary you trust.
 `penpot_native_png` performs:
 
 1. `POST /api/rpc/command/login-with-password` with the configured email/password;
-2. capture the `auth-token` session cookie and profile id;
-3. `POST /api/export` with transit `:cmd :export-shapes`, the frame id and
-   `:type :png`;
-4. download the returned `/assets/by-id/...` resource.
+2. capture the `auth-token` session cookie;
+3. launch the configured headless Chrome with CDP;
+4. set the cookie for the Penpot origin and open
+   `/render.html?file-id=…&page-id=…&object-id=…&route=objects`;
+5. wait for `#screenshot-<frame-id>` and fonts;
+6. capture the element at the requested scale.
 
-The access token is **not** accepted by the exporter; it needs the session
-cookie. The password is stored in the plugin's profile config, so use a
-dedicated Penpot account. The download still needs the deployment to proxy
-`/assets/by-id/`; the render itself can succeed while the download fails.
+This is Penpot's render page, not the plugin's SVG renderer. It does **not** use
+`/api/export` or `/assets/by-id`, so it works without the asset proxy. It needs
+both the browser path and the credentials. The access token is not accepted by
+the render page; the login session cookie is.
+
+The password is stored in the plugin's profile config, so use a dedicated
+Penpot account. The browser is launched with an isolated temp profile and a
+short-lived debugging port; the cookie is not persisted.
 
 ## Fidelity tips
 

@@ -214,5 +214,6 @@ export interface PenpotBackend {
     scale: number
     email: string
     password: string
+    browserPath: string
   }): Promise<Uint8Array>
 }

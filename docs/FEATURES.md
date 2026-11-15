@@ -112,10 +112,10 @@ Neither is Penpot's WASM canvas; images are placeholders, paths/effects are
 omitted, and no browser is bundled.
 
 `penpot_native_png` is the exact opt-in path: it logs in with optional
-email/password, calls Penpot's `/api/export` exporter, and downloads the result.
-The exporter needs the `auth-token` session cookie, not the access token, and the
-download still needs `/assets/by-id/` proxying. Credentials are plain profile
-config; use a dedicated account.
+email/password, opens Penpot's `/render.html` in the configured headless browser,
+and screenshots the frame element. It bypasses `/api/export` and
+`/assets/by-id`, so it works without the asset proxy. It needs the browser path
+and credentials; the access token cannot authenticate the render page.
 
 ## Command inventory
 

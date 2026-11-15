@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
+import { renderNativeFramePng } from './browser-shot.js'
 import type {
   PenpotBackend,
   PenpotMedia,
@@ -27,6 +28,8 @@ export interface ApiBackendOptions {
   token: string
   /** Injectable for tests. */
   fetchImpl?: typeof fetch
+  /** Injectable for tests; production uses the headless render page. */
+  renderFramePng?: typeof renderNativeFramePng
 }
 
 /** Strip a trailing /api/rpc or slash so any pasted form works. */
@@ -134,6 +137,7 @@ const failOnErrorEvent = (events: Array<{ event: string; data: unknown }>): void
 export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
   const base = normalizeBase(options.apiUrl)
   const fetchImpl = options.fetchImpl ?? globalThis.fetch
+  const renderFrame = options.renderFramePng ?? renderNativeFramePng
   const headers = { authorization: `Token ${options.token}`, accept: 'application/json' }
 
   const rpc = async (command: string, body: Record<string, unknown> = {}): Promise<Response> => {
@@ -432,8 +436,8 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
       return files
     },
 
-    async exportFramePng({ fileId, pageId, frameId, name, scale, email, password }) {
-      // Penpot's exporter uses a browser session cookie, not the access token.
+    async exportFramePng({ fileId, pageId, frameId, name, scale, email, password, browserPath }) {
+      // Penpot's render page uses a browser session cookie, not the access token.
       const loginResponse = await fetchImpl(`${base}/api/rpc/command/login-with-password`, {
         method: 'POST',
         headers: { accept: 'application/json', 'content-type': 'application/json' },
@@ -444,74 +448,31 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
         throw new PenpotApiError(loginResponse.status, text.slice(0, 300).trim())
       }
       const profile = await loginResponse.json() as Record<string, unknown>
+      if (String(profile['id'] ?? '').length === 0) {
+        throw new PenpotApiError(loginResponse.status, 'login returned no profile id')
+      }
       const setCookies = typeof loginResponse.headers.getSetCookie === 'function'
         ? loginResponse.headers.getSetCookie()
         : [loginResponse.headers.get('set-cookie')].filter((value): value is string => value !== null)
-      const cookie = setCookies.map((value) => value.split(';')[0]).filter((value): value is string => value !== undefined && value.length > 0).join('; ')
-      if (cookie.length === 0) throw new PenpotApiError(loginResponse.status, 'login returned no session cookie')
-      const profileId = String(profile['id'] ?? '')
-      if (profileId.length === 0) throw new PenpotApiError(loginResponse.status, 'login returned no profile id')
-
-      const body = {
-        '~:cmd': '~:export-shapes',
-        '~:wait': true,
-        '~:profile-id': profileId,
-        '~:exports': [{
-          '~:file-id': fileId,
-          '~:page-id': pageId,
-          '~:object-id': frameId,
-          '~:type': '~:png',
-          '~:scale': scale,
-          '~:suffix': '',
-          '~:name': name,
-        }],
+      const authCookie = setCookies
+        .map((value) => value.split(';')[0])
+        .find((value): value is string => value !== undefined && value.startsWith('auth-token='))
+      if (authCookie === undefined) {
+        throw new PenpotApiError(loginResponse.status, 'login returned no auth-token session cookie')
       }
-      const exportResponse = await fetchImpl(`${base}/api/export`, {
-        method: 'POST',
-        headers: {
-          accept: 'application/transit+json',
-          'content-type': 'application/transit+json',
-          cookie,
-        },
-        body: JSON.stringify(body),
+      const cookieValue = authCookie.slice('auth-token='.length)
+      if (cookieValue.length === 0) {
+        throw new PenpotApiError(loginResponse.status, 'login returned an empty session cookie')
+      }
+      return await renderFrame({
+        browserPath,
+        baseUrl: base,
+        cookieValue,
+        fileId,
+        pageId,
+        frameId,
+        scale,
       })
-      if (!exportResponse.ok) {
-        const text = await exportResponse.text().catch(() => '')
-        throw new PenpotApiError(exportResponse.status, text.slice(0, 500).trim())
-      }
-      const decoded = decodeTransit(await exportResponse.json() as unknown)
-      const root = Array.isArray(decoded) ? decoded[0] : decoded
-      const resource = root !== null && typeof root === 'object' ? root as Record<string, unknown> : {}
-      const nested = resource['resource'] !== null && typeof resource['resource'] === 'object'
-        ? resource['resource'] as Record<string, unknown>
-        : undefined
-      const rawUri = resource['uri'] ?? nested?.['uri']
-      const uri = typeof rawUri === 'string'
-        ? rawUri
-        : rawUri !== null && typeof rawUri === 'object' && typeof (rawUri as Record<string, unknown>)['uri'] === 'string'
-          ? String((rawUri as Record<string, unknown>)['uri'])
-          : undefined
-      if (uri === undefined || uri.length === 0) {
-        throw new PenpotApiError(exportResponse.status, 'Penpot export finished without a resource URI')
-      }
-      let target = new URL(uri, `${base}/`)
-      // The exporter's resource is on the deployment's public origin, which may
-      // have a self-signed certificate or a different host. Asset paths belong to
-      // the configured API origin.
-      if (target.pathname.startsWith('/assets/')) {
-        const baseUrl = new URL(base)
-        target = new URL(`${target.pathname}${target.search}`, baseUrl)
-      }
-      const download = await fetchImpl(target.toString(), {
-        headers: { cookie, accept: 'image/png' },
-      })
-      if (!download.ok) {
-        const hint = download.status === 404
-          ? ' (the deployment must proxy /assets/by-id/ to the backend)'
-          : ''
-        throw new PenpotApiError(download.status, `native PNG download failed${hint}`)
-      }
-      return new Uint8Array(await download.arrayBuffer())
     },
 
     async exportFile(fileId) {

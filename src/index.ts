@@ -1602,7 +1602,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
 
   ctx.tools.register(defineTool({
     name: 'penpot_native_png',
-    description: 'Render a frame with Penpot\'s own exporter using the optional email/password in the Plugins PNG-export group. Exact Penpot output, but the deployment must proxy /assets/by-id/ for the download.',
+    description: 'Render a frame with Penpot\'s own render page using the configured headless browser and optional email/password. Exact Penpot output; no /assets/by-id proxy is needed for this tool.',
     parameters: {
       fileId: { type: 'string', required: true, description: 'File uuid.' },
       frameId: { type: 'string', required: true, description: 'Frame uuid.' },
@@ -1631,6 +1631,10 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       const page = await backend.page(args.fileId, args.pageId)
       const frame = page.objects[args.frameId]
       if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.frameId} is not on page ${page.id}`)
+      const browserPath = config.browserPath.get()
+      if (browserPath.length === 0) {
+        throw new Error('penpot_native_png needs the headless browser path in the PNG export group on the Plugins page')
+      }
       const bytes = await backend.exportFramePng({
         fileId: args.fileId,
         pageId: page.id,
@@ -1639,6 +1643,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         scale: Math.max(0.1, Math.min(4, args.scale ?? 2)),
         email,
         password,
+        browserPath,
       })
       await writeFile(args.path, bytes)
       return { path: args.path, bytes: bytes.byteLength }

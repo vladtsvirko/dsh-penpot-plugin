@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.4
+
+- **Native PNG now actually works.** The previous implementation called
+  Penpot's `/api/export` exporter, which rendered the frame but returned a
+  resource on `/assets/by-id/` and failed on the deployment's missing proxy.
+  `penpot_native_png` now logs in with the saved email/password, opens Penpot's
+  own `/render.html` in the configured headless browser, and screenshots the
+  `#screenshot-<frame>` element through Chrome DevTools. This is Penpot's render
+  page, not the plugin's SVG renderer, and it bypasses the exporter's asset
+  download entirely.
+- **No asset proxy is needed for native PNGs.** The login + browser path works
+  with the existing team/project access. `/assets/by-id` is still only needed by
+  `penpot_download_asset` and `penpot_export`.
+- **Validated against Pulse:** a 780×1688 PNG (390×844 at 2×) was rendered from
+  the team project with the DSH account and saved as
+  `demo/pulse-native.png`.
+- The browser path is required for this tool; credentials alone are not enough.
+  The browser is launched headless, with an isolated profile and a short-lived
+  debug port. The session cookie is passed through CDP, not persisted.
+- 45 tools, 42 tests. The old `/api/export` transit path was removed from the
+  active native tool; fake-server coverage now covers login and renderer handoff.
+
 ## 0.10.3
 
 - **Optional credentials for Penpot's own PNG export.** The Plugins form now has

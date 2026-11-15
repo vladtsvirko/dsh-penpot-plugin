@@ -130,11 +130,13 @@ Action types: `navigate`, `open-overlay`, `toggle-overlay`, `close-overlay`,
 | Endpoint | Notes |
 |---|---|
 | `POST /api/rpc/command/login-with-password` | JSON `{email,password}`; sets `auth-token` session cookie |
-| `POST /api/export` | transitive JSON body; `cmd: export-shapes`; returns a resource with `uri` |
+| `GET /render.html` | authenticated page; `file-id`, `page-id`, `object-id`, `route=objects` |
+| `POST /api/export` | exporter service path; not used by `penpot_native_png` |
 
-The normal access token authenticates the RPC API, but **not** `/api/export`.
-The exporter runs a browser and requires the `auth-token` cookie from login. Its
-resource is on `/assets/by-id/…`, so the download also needs the asset proxy.
+The normal access token authenticates the RPC API, but **not** the render page.
+`penpot_native_png` logs in, sets the session cookie in a headless browser,
+opens `render.html`, and screenshots `#screenshot-<frame-id>`. This avoids the
+exporter's `/assets/by-id/` resource download.
 
 ### Export / import
 

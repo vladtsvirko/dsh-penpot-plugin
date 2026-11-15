@@ -6,6 +6,7 @@ releases; every row states what was actually exercised.
 
 | Plugin | DSH | Penpot | Status | Notes |
 |---|---|---|---|---|
+| 0.10.4 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live native PNG: DSH login, Penpot render page, Chrome CDP screenshot, 780×1688; no asset proxy needed; 0.10.3 features | replaces the exporter-resource path with a direct render-page screenshot; requires browserPath + email/password |
 | 0.10.3 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | login/export flow covered by fake server; live login requires user-supplied credentials; asset download still depends on `/assets/by-id` proxy | adds optional email/password and `penpot_native_png`; credentials stored in profile; 45 tools, 42 tests |
 | 0.10.2 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live data corrected to built-in `sourcesanspro`; Pulse demo re-laid; font-family resolution checked against Penpot's `local-fonts` source | patch for 0.10.1 font family: display name vs CSS family; baseline fix included |
 | 0.10.1 | `>=0.1.0-rc.6 <0.3.0-0` | 2.18.6 | live: text layout corrected against Penpot's real positionData; Pulse demo re-rendered; 0.10.0 features retested by the demo | patch for 0.10.0 text baseline/line width and default font (Source Sans Pro); 44 tools, 41 tests |

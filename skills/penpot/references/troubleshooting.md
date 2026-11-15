@@ -49,18 +49,20 @@ the token.
 - Media uploads use multipart field `content`; a JSON `content` map is not a
   file upload.
 
-## Native PNG exporter fails
+## Native PNG fails
 
 - `penpot_native_png needs Penpot email/password`: set the optional PNG-export
   credentials on the Plugins page, or use `penpot_frame_png`.
-- `login returned no session cookie`: the login endpoint refused or the
-  deployment changed its cookie name. Check the email/password with the Penpot
-  UI.
-- Exporter timeout `waiting for locator('#screenshot-…')`: the exporter's
-  browser session was not authenticated. The access token cannot substitute for
-  the login cookie.
-- Download 404 after a successful export: `/assets/by-id/` is not proxied. The
-  exporter rendered the PNG, but the deployment cannot serve it.
+- `penpot_native_png needs the headless browser path`: set the browser path in
+  the same PNG-export group. Native export needs both.
+- `login returned no session cookie`: the login endpoint refused or changed its
+  cookie name. Check the email/password with the Penpot UI.
+- `Penpot render page did not expose #screenshot-…`: the session has no access
+  to the file/project, the render page failed, or the frame id is wrong. Check
+  the target account's team/project membership.
+- A Chrome/DevTools launch failure usually means the browser path is wrong, the
+  binary is not Chromium-compatible, or the host blocks loopback debugging
+  ports.
 - Never paste the password into a design, comment, or tool result. Use a
   dedicated account; clear the field when not needed.
 
