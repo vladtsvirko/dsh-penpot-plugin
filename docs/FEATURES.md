@@ -30,7 +30,7 @@ checked against a live deployment.
 | Advanced shape writes | documented | paths, booleans, component creation via `update-file`; skill `references/write.md` |
 | Components | read | `penpot_components`, `penpot_component_instances` |
 | Prototype | read + write | `penpot_prototype`, `penpot_create_flow`, `penpot_add_interaction` |
-| Frame preview | SVG + optional PNG | `penpot_frame_svg`, `penpot_frame_png` |
+| Frame preview | SVG + browser PNG + native PNG | `penpot_frame_svg`, `penpot_frame_png`, `penpot_native_png` |
 | Media / object thumbnail bytes | blocked by deployment | `penpot_download_asset` once `/assets/by-id/` is proxied |
 | Per-frame preview | best-effort | `penpot_frame_svg`, `penpot_frame_png` (user browser) |
 | Component creation/sync | not exposed | read/inspect only |
@@ -109,8 +109,13 @@ There is no Penpot per-frame export RPC. `penpot_frame_svg` renders a subset
 (frames, rects, circles, text, groups, solid styles) and reports limitations.
 `penpot_frame_png` sends that SVG through a user-configured headless browser.
 Neither is Penpot's WASM canvas; images are placeholders, paths/effects are
-omitted, and no browser is bundled. `penpot_download_asset` covers direct asset
-bytes once the deployment proxies `/assets/by-id/`.
+omitted, and no browser is bundled.
+
+`penpot_native_png` is the exact opt-in path: it logs in with optional
+email/password, calls Penpot's `/api/export` exporter, and downloads the result.
+The exporter needs the `auth-token` session cookie, not the access token, and the
+download still needs `/assets/by-id/` proxying. Credentials are plain profile
+config; use a dedicated account.
 
 ## Command inventory
 

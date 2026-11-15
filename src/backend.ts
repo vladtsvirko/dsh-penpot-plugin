@@ -201,4 +201,18 @@ export interface PenpotBackend {
   exportFile(fileId: string): Promise<Uint8Array>
   /** Import a `.penpot` file, either as a new file or in place. */
   importFile(input: { path: string; projectId?: string; fileId?: string; name?: string }): Promise<{ id?: string; raw?: unknown }>
+  /**
+   * Render one frame with Penpot's own exporter. This logs in with the
+   * optional email/password credentials, asks `/api/export` for a PNG, and
+   * downloads the resulting asset.
+   */
+  exportFramePng(input: {
+    fileId: string
+    pageId: string
+    frameId: string
+    name: string
+    scale: number
+    email: string
+    password: string
+  }): Promise<Uint8Array>
 }

@@ -150,7 +150,7 @@ describe('penpot config page', () => {
     const form = {
       state: {
         status: 'ready',
-        value: { apiUrl: 'http://localhost:8090', token: 'secret', browserPath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
+        value: { apiUrl: 'http://localhost:8090', token: 'secret', browserPath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', exportEmail: 'export@example.com', exportPassword: 'export-secret' },
         revision: 7,
         writable: true,
       },
@@ -162,8 +162,8 @@ describe('penpot config page', () => {
     const tree = renderPage(register(), form)
 
     const inputs = findAll(tree, 'input')
-    expect(inputs.map((input) => input.props.value)).toEqual(['http://localhost:8090', 'secret', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'])
-    expect(inputs.map((input) => input.props.type)).toEqual(['url', 'password', 'text'])
+    expect(inputs.map((input) => input.props.value)).toEqual(['http://localhost:8090', 'secret', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', 'export@example.com', 'export-secret'])
+    expect(inputs.map((input) => input.props.type)).toEqual(['url', 'password', 'text', 'email', 'password'])
 
     const button = findAll(tree, 'button')[0]
     expect(button?.props.disabled).toBe(false)
@@ -174,6 +174,8 @@ describe('penpot config page', () => {
         { op: 'set', path: ['apiUrl'], value: 'http://localhost:8090' },
         { op: 'set', path: ['token'], value: 'secret' },
         { op: 'set', path: ['browserPath'], value: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
+        { op: 'set', path: ['exportEmail'], value: 'export@example.com' },
+        { op: 'set', path: ['exportPassword'], value: 'export-secret' },
       ],
       revision: 7,
     }])

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.3
+
+- **Optional credentials for Penpot's own PNG export.** The Plugins form now has
+  a grouped **PNG export (optional)** section: headless browser, Penpot email and
+  Penpot password. Only `penpot_native_png` uses the email/password.
+- **Native PNG path.** The tool logs in with `login-with-password`, captures the
+  `auth-token` session cookie, calls `/api/export` with the transit
+  `export-shapes` payload and downloads the returned resource. This is Penpot's
+  exporter, not the plugin's SVG renderer.
+- **Credentials are plain profile config.** The form warns and masks the
+  password; use a dedicated Penpot account, not a personal password. The access
+  token remains the normal API credential.
+- **Download dependency.** The exporter returns `/assets/by-id/...`; the plugin
+  reports a clear error when that path is not proxied. The access token cannot
+  authenticate the exporter — it needs the browser session cookie from login.
+- 45 tools, 42 tests. Fake-server coverage for login, transit export payload,
+  cookie forwarding and PNG download.
+- Still open: the deployment proxy, and exact previews without native export.
+
 ## 0.10.2
 
 - **Built-in font family was still wrong.** Penpot’s built-in font is

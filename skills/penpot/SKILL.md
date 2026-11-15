@@ -49,6 +49,7 @@ usually means by “screen”.
 | Components | `penpot_components`, `penpot_component_instances` |
 | Prototype flows | `penpot_prototype`, `penpot_create_flow`, `penpot_add_interaction` |
 | Preview a frame | `penpot_frame_svg`, `penpot_frame_png` |
+| Exact Penpot PNG | `penpot_native_png` (uses optional credentials) |
 | Start a comment, reply, edit, resolve | `penpot_create_comment_thread`, `penpot_reply_comment`, `penpot_update_comment`, `penpot_delete_comment`, `penpot_resolve_comment` |
 | Duplicate a baseline | `penpot_duplicate_file` |
 | Start from a template | `penpot_templates`, `penpot_clone_template` |
@@ -75,6 +76,10 @@ usually means by “screen”.
   text, groups and solid styles; image bytes and paths are placeholders/omitted.
   `penpot_frame_png` needs the headless browser path configured on the Plugins
   page and renders the same SVG, not Penpot's exact canvas.
+- **Native PNG is opt-in.** `penpot_native_png` needs a Penpot email/password in
+  the optional PNG-export group, logs in for a session cookie and calls
+  `/api/export`. The rendered resource is on `/assets/by-id/`, so the deployment
+  must proxy that path. Never print the password.
 - **Text is a rich-text tree.** `shape.content` is not a string. `penpot_outline`
   already extracts it; for raw JSON use the recursion in
   `references/shapes.md`.
@@ -179,7 +184,8 @@ not proxy that route, the export fails after Penpot answers 200. See
 - Component support is read-only. `penpot_components` inspects the main
   instance when the component object map is not returned.
 - Frame preview is an approximation. `penpot_frame_png` requires a user-provided
-  browser; no browser is bundled.
+  browser; no browser is bundled. `penpot_native_png` is exact but needs optional
+  credentials and the asset proxy.
 - This skill documents Penpot 2.x RPC behavior, tested with 2.18.6. A shape or
   command change is a compatibility event; widen testing or cut a release.
 

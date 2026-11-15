@@ -39,18 +39,27 @@ export const Config: Schema<PenpotPluginConfigInput, PenpotPluginConfig> = Schem
   // Optional Chrome/Chromium/Edge executable used by penpot_frame_png. The SVG
   // tool works without it; the plugin never bundles a browser.
   browserPath: Schema.string().default('').volatile(),
+  // Optional credentials for Penpot's own PNG exporter. Kept in the same
+  // optional export group as the browser path; both are only used by the
+  // native/preview export tools.
+  exportEmail: Schema.string().default('').volatile(),
+  exportPassword: Schema.string().default('').volatile(),
 })
 
 export interface PenpotPluginConfigInput {
   apiUrl?: string
   token?: string
   browserPath?: string
+  exportEmail?: string
+  exportPassword?: string
 }
 
 export interface PenpotPluginConfig {
   apiUrl: Volatile<string>
   token: Volatile<string>
   browserPath: Volatile<string>
+  exportEmail: Volatile<string>
+  exportPassword: Volatile<string>
 }
 
 /** Render one list result: id and name per line, backend in parentheses. */
@@ -1588,6 +1597,51 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       const render = renderFrameSvg(page, args.frameId)
       await writeFile(args.path, render.svg, 'utf8')
       return { path: args.path, bytes: Buffer.byteLength(render.svg), limitations: render.limitations }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_native_png',
+    description: 'Render a frame with Penpot\'s own exporter using the optional email/password in the Plugins PNG-export group. Exact Penpot output, but the deployment must proxy /assets/by-id/ for the download.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Frame uuid.' },
+      path: { type: 'string', required: true, description: 'Absolute path to write the .png.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      scale: { type: 'number', description: 'Export scale; default 2.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true, description: 'Where the PNG was written.' },
+          bytes: { type: 'number', required: true, description: 'Size in bytes.' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `${value.path} (${String(value.bytes)} bytes, Penpot exporter)` }],
+    },
+    async execute(args) {
+      const email = config.exportEmail.get()
+      const password = config.exportPassword.get()
+      if (email.length === 0 || password.length === 0) {
+        throw new Error('penpot_native_png needs Penpot email/password in the PNG export group on the Plugins page; use penpot_frame_png for the no-credentials renderer')
+      }
+      const backend = requireBackend()
+      const page = await backend.page(args.fileId, args.pageId)
+      const frame = page.objects[args.frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.frameId} is not on page ${page.id}`)
+      const bytes = await backend.exportFramePng({
+        fileId: args.fileId,
+        pageId: page.id,
+        frameId: args.frameId,
+        name: frame.name.length === 0 ? 'Frame' : frame.name,
+        scale: Math.max(0.1, Math.min(4, args.scale ?? 2)),
+        email,
+        password,
+      })
+      await writeFile(args.path, bytes)
+      return { path: args.path, bytes: bytes.byteLength }
     },
   }))
 

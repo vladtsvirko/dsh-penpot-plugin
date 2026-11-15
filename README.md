@@ -22,7 +22,7 @@ skill's `references/write.md`.
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.10.2
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.10.3
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -37,7 +37,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.10.2
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.10.3
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -54,6 +54,11 @@ On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and pre
 - **Headless browser (optional)** — absolute path to Chrome, Chromium or Edge.
   Only `penpot_frame_png` needs it; `penpot_frame_svg` works without a browser.
   The browser renders the plugin's best-effort SVG, not Penpot's exact canvas.
+- **Penpot email / password (optional)** — used only by `penpot_native_png`
+  to log in to Penpot's own exporter. They are stored in the profile user layer;
+  use a dedicated Penpot account, not your personal password. Leave them empty
+  to keep using the plugin renderer. Exact export still needs the deployment to
+  proxy `/assets/by-id/` so the rendered PNG can be downloaded.
 
 **Save** writes the row's config into the profile's user layer; the URL and
 token take effect on the next tool call.
@@ -64,6 +69,9 @@ process environment:
 ```sh
 export PENPOT_API_URL='http://yourpenpot.url'      # no /api/rpc suffix needed
 export PENPOT_ACCESS_TOKEN='...'                   # Penpot: Settings -> Access tokens
+# Optional, only for exact PNG export:
+export PENPOT_EXPORT_EMAIL='agent@example.com'
+export PENPOT_EXPORT_PASSWORD='...'
 ```
 
 The row's `config` also accepts the two values directly:
@@ -73,6 +81,8 @@ The row's `config` also accepts the two values directly:
   config:
     apiUrl: http://yourpenpot.url
     token: !!js process.env.PENPOT_ACCESS_TOKEN ?? ''
+    exportEmail: !!js process.env.PENPOT_EXPORT_EMAIL ?? ''
+    exportPassword: !!js process.env.PENPOT_EXPORT_PASSWORD ?? ''
 ```
 
 The UI values override the environment. Ask the agent for `penpot_status`: it
@@ -123,6 +133,7 @@ names the endpoint, and a missing value is reported by name.
 | `penpot_resolve_comment` | resolve or reopen a thread |
 | `penpot_frame_svg` | render a frame to best-effort SVG |
 | `penpot_frame_png` | render a frame to PNG via the configured browser |
+| `penpot_native_png` | export a frame with Penpot's own exporter (optional email/password) |
 | `penpot_download_asset` | download an asset id when `/assets/by-id/` is proxied |
 | `penpot_export` | write a `.penpot` file to disk |
 | `penpot_import` | upload a `.penpot` file as a new or replacement file |
@@ -152,6 +163,12 @@ best-effort: the SVG renderer covers frames, rects, circles, text, groups and
 solid styles, and the PNG tool sends that SVG through the configured browser.
 Neither is Penpot's own canvas renderer; paths, effects and real image bytes are
 not reproduced yet.
+
+`penpot_native_png` is the exact path: it logs in with the optional email and
+password, calls Penpot's `/api/export` exporter, and downloads the PNG. The
+exporter uses a **session cookie**, not the access token. Its result is served
+from `/assets/by-id/`; if the deployment does not proxy that path, the render
+succeeds but the download fails with a clear error.
 
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file
 tools, then import it back with `penpot_import` — no extra CLI and no second

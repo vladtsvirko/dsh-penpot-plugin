@@ -12,3 +12,7 @@
         # Optional Chrome/Chromium/Edge executable for penpot_frame_png. The
         # SVG preview works without it; the plugin never bundles a browser.
         browserPath: !!js process.env.PENPOT_BROWSER_PATH ?? ""
+        # Optional credentials for Penpot's own PNG exporter. Leave empty to
+        # use the plugin's best-effort SVG/Chrome preview instead.
+        exportEmail: !!js process.env.PENPOT_EXPORT_EMAIL ?? ""
+        exportPassword: !!js process.env.PENPOT_EXPORT_PASSWORD ?? ""

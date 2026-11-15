@@ -41,6 +41,9 @@ window.__ModuleLoader__.load({
 .dsh-penpot-form .primary:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2); }
 .dsh-penpot-form .primary:disabled { opacity: 0.55; cursor: default; }
 .dsh-penpot-form .message { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.dsh-penpot-form .section { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l1); }
+.dsh-penpot-form .section-title { font-weight: 600; }
+.dsh-penpot-form .warning { color: var(--dsw-alias-state-warning-primary); font-size: 12px; line-height: 1.45; }
 `
 
     function Field({ label, hint, children }) {
@@ -59,6 +62,8 @@ window.__ModuleLoader__.load({
       const [apiUrl, setApiUrl] = React.useState(String(value.apiUrl ?? ''))
       const [token, setToken] = React.useState(String(value.token ?? ''))
       const [browserPath, setBrowserPath] = React.useState(String(value.browserPath ?? ''))
+      const [exportEmail, setExportEmail] = React.useState(String(value.exportEmail ?? ''))
+      const [exportPassword, setExportPassword] = React.useState(String(value.exportPassword ?? ''))
       const [saving, setSaving] = React.useState(false)
       const [message, setMessage] = React.useState('')
 
@@ -72,6 +77,8 @@ window.__ModuleLoader__.load({
         setApiUrl(String(next.apiUrl ?? ''))
         setToken(String(next.token ?? ''))
         setBrowserPath(String(next.browserPath ?? ''))
+        setExportEmail(String(next.exportEmail ?? ''))
+        setExportPassword(String(next.exportPassword ?? ''))
       }, [revision])
 
       if (state === undefined) {
@@ -87,8 +94,11 @@ window.__ModuleLoader__.load({
       const savedUrl = String(value.apiUrl ?? '')
       const savedToken = String(value.token ?? '')
       const savedBrowser = String(value.browserPath ?? '')
+      const savedExportEmail = String(value.exportEmail ?? '')
+      const savedExportPassword = String(value.exportPassword ?? '')
       const urlSet = savedUrl.trim().length > 0
       const tokenSet = savedToken.trim().length > 0
+      const exportCredentialsSet = savedExportEmail.trim().length > 0 && savedExportPassword.trim().length > 0
       const configured = urlSet && tokenSet
       const disabled = !state.writable || saving
       const save = async () => {
@@ -100,6 +110,8 @@ window.__ModuleLoader__.load({
               { op: 'set', path: ['apiUrl'], value: apiUrl.trim() },
               { op: 'set', path: ['token'], value: token.trim() },
               { op: 'set', path: ['browserPath'], value: browserPath.trim() },
+              { op: 'set', path: ['exportEmail'], value: exportEmail.trim() },
+              { op: 'set', path: ['exportPassword'], value: exportPassword.trim() },
             ],
             state.revision,
           )
@@ -134,7 +146,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'muted' },
-            `API URL ${urlSet ? 'set' : 'not set'} · Access token ${tokenSet ? 'set' : 'not set'} · Headless browser ${savedBrowser.trim().length > 0 ? 'set' : 'not set'}`,
+            `API URL ${urlSet ? 'set' : 'not set'} · Access token ${tokenSet ? 'set' : 'not set'} · Headless browser ${savedBrowser.trim().length > 0 ? 'set' : 'not set'} · PNG credentials ${exportCredentialsSet ? 'set' : 'not set'}`,
           ),
           h('div', { className: 'muted' }, 'Changes are saved to this profile and apply immediately.'),
         ),
@@ -169,19 +181,55 @@ window.__ModuleLoader__.load({
           }),
         ),
         h(
-          Field,
-          {
-            label: 'Headless browser (optional)',
-            hint: 'Absolute path to Chrome, Chromium or Edge for penpot_frame_png. The SVG tool works without it.',
-          },
-          h('input', {
-            type: 'text',
-            className: 'input',
-            value: browserPath,
-            disabled,
-            placeholder: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-            onChange: (event) => setBrowserPath(event.target.value),
-          }),
+          'div',
+          { className: 'section' },
+          h('div', { className: 'section-title' }, 'PNG export (optional)'),
+          h('div', { className: 'warning' }, 'Used only by the native PNG tool and the preview tool. Credentials are stored in this profile; use a dedicated Penpot account, not your personal password.'),
+          h(
+            Field,
+            {
+              label: 'Headless browser (optional)',
+              hint: 'Absolute path to Chrome, Chromium or Edge for penpot_frame_png. The SVG tool works without it.',
+            },
+            h('input', {
+              type: 'text',
+              className: 'input',
+              value: browserPath,
+              disabled,
+              placeholder: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+              onChange: (event) => setBrowserPath(event.target.value),
+            }),
+          ),
+          h(
+            Field,
+            {
+              label: 'Penpot email (optional)',
+              hint: 'Only for Penpot\'s own PNG exporter. Leave empty to use the plugin renderer.',
+            },
+            h('input', {
+              type: 'email',
+              className: 'input',
+              value: exportEmail,
+              disabled,
+              placeholder: 'you@example.com',
+              onChange: (event) => setExportEmail(event.target.value),
+            }),
+          ),
+          h(
+            Field,
+            {
+              label: 'Penpot password (optional)',
+              hint: 'Stored in the profile user layer. Use a dedicated account and clear this field when exact export is not needed.',
+            },
+            h('input', {
+              type: 'password',
+              className: 'input',
+              value: exportPassword,
+              disabled,
+              placeholder: 'Penpot account password',
+              onChange: (event) => setExportPassword(event.target.value),
+            }),
+          ),
         ),
         h(
           'div',

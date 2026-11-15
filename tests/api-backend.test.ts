@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createApiBackend, normalizeBase, PenpotApiError } from '../src/api-backend.js'
 
-const calls: Array<{ url: string; auth: string; accept: string; body: string }> = []
+const calls: Array<{ url: string; auth: string; accept: string; cookie: string; body: string }> = []
 let server: Server | undefined
 
-const start = async (handler: (call: { url: string; auth: string; accept: string; body: string }, response: import('node:http').ServerResponse) => void): Promise<string> => {
+const start = async (handler: (call: { url: string; auth: string; accept: string; cookie: string; body: string }, response: import('node:http').ServerResponse) => void): Promise<string> => {
   calls.length = 0
   server = createServer((request, response) => {
     let body = ''
@@ -18,6 +18,7 @@ const start = async (handler: (call: { url: string; auth: string; accept: string
         url: request.url ?? '',
         auth: request.headers.authorization ?? '',
         accept: request.headers.accept ?? '',
+        cookie: request.headers.cookie ?? '',
         body,
       }
       calls.push(call)
@@ -195,6 +196,44 @@ describe('api backend', () => {
     await backend.deleteComment({ commentId: 'comment-1' })
     expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ id: 'comment-1', content: 'Updated' })
     expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({ id: 'comment-1' })
+  })
+
+  it('logs in and renders a native Penpot PNG', async () => {
+    const base = await start((call, response) => {
+      if (call.url.includes('login-with-password')) {
+        response.writeHead(200, { 'content-type': 'application/json', 'set-cookie': 'auth-token=session-1; Path=/; HttpOnly' })
+        response.end(JSON.stringify({ id: 'profile-1', fullname: 'Tester' }))
+        return
+      }
+      if (call.url === '/api/export') {
+        response.writeHead(200, { 'content-type': 'application/transit+json' })
+        response.end(JSON.stringify({ '~:id': 'resource-1', '~:uri': '/assets/by-id/resource-1', '~:name': 'Frame' }))
+        return
+      }
+      if (call.url === '/assets/by-id/resource-1') {
+        response.writeHead(200, { 'content-type': 'image/png' })
+        response.end(Buffer.from('PNGDATA'))
+        return
+      }
+      response.writeHead(404)
+      response.end()
+    })
+    const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+    const bytes = await backend.exportFramePng({
+      fileId: 'file-1', pageId: 'page-1', frameId: 'frame-1', name: 'Frame', scale: 2,
+      email: 'export@example.com', password: 'secret',
+    })
+    expect(Buffer.from(bytes).toString()).toBe('PNGDATA')
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ email: 'export@example.com', password: 'secret' })
+    expect(calls[0]?.auth).toBe('')
+    expect(calls[1]?.url).toBe('/api/export')
+    expect(calls[1]?.auth).toBe('')
+    expect(calls[1]?.body).toContain('"~:cmd":"~:export-shapes"')
+    expect(calls[1]?.body).toContain('"~:object-id":"frame-1"')
+    expect(calls[1]?.body).toContain('"~:scale":2')
+    expect(calls.at(-1)?.url).toBe('/assets/by-id/resource-1')
+    expect(calls[1]?.cookie).toContain('auth-token=session-1')
+    expect(calls.at(-1)?.cookie).toContain('auth-token=session-1')
   })
 
   it('reads the SSE export URL and the SSE import id', async () => {

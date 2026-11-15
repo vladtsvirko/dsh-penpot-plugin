@@ -56,7 +56,7 @@ const asRefs = (value: unknown): PenpotRef[] => {
  * markers these endpoints emit are `~:` (keyword key) and `~u` (uuid), so a
  * small normalizer is enough and avoids a transit dependency.
  */
-const decodeTransit = (value: unknown): unknown => {
+export const decodeTransit = (value: unknown): unknown => {
   if (typeof value === 'string') {
     if (value.startsWith('~u')) return value.slice(2)
     if (value.startsWith('~:')) return value.slice(2)
@@ -430,6 +430,88 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
         files.push({ id: summary.id, name: summary.name })
       }
       return files
+    },
+
+    async exportFramePng({ fileId, pageId, frameId, name, scale, email, password }) {
+      // Penpot's exporter uses a browser session cookie, not the access token.
+      const loginResponse = await fetchImpl(`${base}/api/rpc/command/login-with-password`, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      if (!loginResponse.ok) {
+        const text = await loginResponse.text().catch(() => '')
+        throw new PenpotApiError(loginResponse.status, text.slice(0, 300).trim())
+      }
+      const profile = await loginResponse.json() as Record<string, unknown>
+      const setCookies = typeof loginResponse.headers.getSetCookie === 'function'
+        ? loginResponse.headers.getSetCookie()
+        : [loginResponse.headers.get('set-cookie')].filter((value): value is string => value !== null)
+      const cookie = setCookies.map((value) => value.split(';')[0]).filter((value): value is string => value !== undefined && value.length > 0).join('; ')
+      if (cookie.length === 0) throw new PenpotApiError(loginResponse.status, 'login returned no session cookie')
+      const profileId = String(profile['id'] ?? '')
+      if (profileId.length === 0) throw new PenpotApiError(loginResponse.status, 'login returned no profile id')
+
+      const body = {
+        '~:cmd': '~:export-shapes',
+        '~:wait': true,
+        '~:profile-id': profileId,
+        '~:exports': [{
+          '~:file-id': fileId,
+          '~:page-id': pageId,
+          '~:object-id': frameId,
+          '~:type': '~:png',
+          '~:scale': scale,
+          '~:suffix': '',
+          '~:name': name,
+        }],
+      }
+      const exportResponse = await fetchImpl(`${base}/api/export`, {
+        method: 'POST',
+        headers: {
+          accept: 'application/transit+json',
+          'content-type': 'application/transit+json',
+          cookie,
+        },
+        body: JSON.stringify(body),
+      })
+      if (!exportResponse.ok) {
+        const text = await exportResponse.text().catch(() => '')
+        throw new PenpotApiError(exportResponse.status, text.slice(0, 500).trim())
+      }
+      const decoded = decodeTransit(await exportResponse.json() as unknown)
+      const root = Array.isArray(decoded) ? decoded[0] : decoded
+      const resource = root !== null && typeof root === 'object' ? root as Record<string, unknown> : {}
+      const nested = resource['resource'] !== null && typeof resource['resource'] === 'object'
+        ? resource['resource'] as Record<string, unknown>
+        : undefined
+      const rawUri = resource['uri'] ?? nested?.['uri']
+      const uri = typeof rawUri === 'string'
+        ? rawUri
+        : rawUri !== null && typeof rawUri === 'object' && typeof (rawUri as Record<string, unknown>)['uri'] === 'string'
+          ? String((rawUri as Record<string, unknown>)['uri'])
+          : undefined
+      if (uri === undefined || uri.length === 0) {
+        throw new PenpotApiError(exportResponse.status, 'Penpot export finished without a resource URI')
+      }
+      let target = new URL(uri, `${base}/`)
+      // The exporter's resource is on the deployment's public origin, which may
+      // have a self-signed certificate or a different host. Asset paths belong to
+      // the configured API origin.
+      if (target.pathname.startsWith('/assets/')) {
+        const baseUrl = new URL(base)
+        target = new URL(`${target.pathname}${target.search}`, baseUrl)
+      }
+      const download = await fetchImpl(target.toString(), {
+        headers: { cookie, accept: 'image/png' },
+      })
+      if (!download.ok) {
+        const hint = download.status === 404
+          ? ' (the deployment must proxy /assets/by-id/ to the backend)'
+          : ''
+        throw new PenpotApiError(download.status, `native PNG download failed${hint}`)
+      }
+      return new Uint8Array(await download.arrayBuffer())
     },
 
     async exportFile(fileId) {

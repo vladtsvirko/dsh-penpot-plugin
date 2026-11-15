@@ -7,9 +7,10 @@ different fidelity:
 |---|---|---|
 | `penpot_frame_svg` | nothing extra | best-effort SVG |
 | `penpot_frame_png` | `browserPath` in the row config | PNG rendered by that browser |
+| `penpot_native_png` | Penpot email/password in the PNG-export group | Penpot's own exporter (exact) |
 
-Neither uses Penpot's WASM canvas. Treat them as design checks, not pixel-exact
-exports.
+The first two do not use Penpot's renderer. The native path does; it is the
+opt-in exact option.
 
 ## SVG coverage
 
@@ -53,6 +54,21 @@ not support it, point `browserPath` at a current Chrome/Chromium or use the SVG
 tool. No `--no-sandbox` is added; do not run the plugin as a privileged user.
 
 The browser is also a trust boundary: only configure a binary you trust.
+
+## Native export
+
+`penpot_native_png` performs:
+
+1. `POST /api/rpc/command/login-with-password` with the configured email/password;
+2. capture the `auth-token` session cookie and profile id;
+3. `POST /api/export` with transit `:cmd :export-shapes`, the frame id and
+   `:type :png`;
+4. download the returned `/assets/by-id/...` resource.
+
+The access token is **not** accepted by the exporter; it needs the session
+cookie. The password is stored in the plugin's profile config, so use a
+dedicated Penpot account. The download still needs the deployment to proxy
+`/assets/by-id/`; the render itself can succeed while the download fails.
 
 ## Fidelity tips
 

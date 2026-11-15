@@ -125,6 +125,17 @@ Action types: `navigate`, `open-overlay`, `toggle-overlay`, `close-overlay`,
 | `move-files` | `{"ids":[…],"project-id"}` | no content |
 | `delete-file` | `{"id"}` | soft delete; avoid without a snapshot |
 
+### Penpot native export
+
+| Endpoint | Notes |
+|---|---|
+| `POST /api/rpc/command/login-with-password` | JSON `{email,password}`; sets `auth-token` session cookie |
+| `POST /api/export` | transitive JSON body; `cmd: export-shapes`; returns a resource with `uri` |
+
+The normal access token authenticates the RPC API, but **not** `/api/export`.
+The exporter runs a browser and requires the `auth-token` cookie from login. Its
+resource is on `/assets/by-id/…`, so the download also needs the asset proxy.
+
 ### Export / import
 
 | Command | Body | Notes |

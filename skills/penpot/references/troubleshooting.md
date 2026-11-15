@@ -49,6 +49,21 @@ the token.
 - Media uploads use multipart field `content`; a JSON `content` map is not a
   file upload.
 
+## Native PNG exporter fails
+
+- `penpot_native_png needs Penpot email/password`: set the optional PNG-export
+  credentials on the Plugins page, or use `penpot_frame_png`.
+- `login returned no session cookie`: the login endpoint refused or the
+  deployment changed its cookie name. Check the email/password with the Penpot
+  UI.
+- Exporter timeout `waiting for locator('#screenshot-…')`: the exporter's
+  browser session was not authenticated. The access token cannot substitute for
+  the login cookie.
+- Download 404 after a successful export: `/assets/by-id/` is not proxied. The
+  exporter rendered the PNG, but the deployment cannot serve it.
+- Never paste the password into a design, comment, or tool result. Use a
+  dedicated account; clear the field when not needed.
+
 ## Headless preview fails
 
 - `penpot_frame_png needs a headless browser`: set the absolute browser path on

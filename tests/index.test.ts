@@ -83,6 +83,7 @@ describe('plugin surface', () => {
       'penpot_group_shapes',
       'penpot_import',
       'penpot_libraries',
+      'penpot_native_png',
       'penpot_outline',
       'penpot_pages',
       'penpot_projects',
