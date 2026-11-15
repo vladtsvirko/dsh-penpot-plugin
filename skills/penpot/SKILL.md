@@ -1,6 +1,6 @@
 ---
 name: penpot
-description: Use when working with Penpot design files through DeepSeek Harness: inspect pages and layers, extract design tokens, audit accessibility, create or edit frames and text, read and write comments, manage versions and files, or export and import .penpot files.
+description: Use when working with Penpot design files through DeepSeek Harness: inspect pages and layers, extract design tokens, audit accessibility, draw frames, text, images and groups, inspect components and prototypes, preview frames, read and write comments, manage versions and files, or export and import .penpot files.
 ---
 
 # Penpot
@@ -41,10 +41,15 @@ usually means by “screen”.
 | Linked design systems | `penpot_libraries` |
 | Create a project / file | `penpot_create_project`, `penpot_create_file` |
 | Draw a frame / rect / circle / text | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text` |
+| Add an image | `penpot_add_image` |
+| Group / ungroup | `penpot_group_shapes`, `penpot_ungroup_shape` |
 | Change a shape | `penpot_update_shape` |
 | Change copy in place | `penpot_update_text` |
 | Delete a layer or subtree | `penpot_delete_shape` |
-| Start a comment, reply, resolve | `penpot_create_comment_thread`, `penpot_reply_comment`, `penpot_resolve_comment` |
+| Components | `penpot_components`, `penpot_component_instances` |
+| Prototype flows | `penpot_prototype`, `penpot_create_flow`, `penpot_add_interaction` |
+| Preview a frame | `penpot_frame_svg`, `penpot_frame_png` |
+| Start a comment, reply, edit, resolve | `penpot_create_comment_thread`, `penpot_reply_comment`, `penpot_update_comment`, `penpot_delete_comment`, `penpot_resolve_comment` |
 | Duplicate a baseline | `penpot_duplicate_file` |
 | Start from a template | `penpot_templates`, `penpot_clone_template` |
 | Whole-file backup / restore | `penpot_export`, `penpot_import` |
@@ -59,9 +64,17 @@ usually means by “screen”.
 - **Write in small steps.** Create a frame, then its children, then re-read with
   `penpot_outline`. Snapshot before a batch or a delete; `penpot_delete_shape`
   is not undoable through this plugin.
-- **Text is positioned explicitly.** `penpot_add_text` creates one positioned
-  line per explicit newline and computes the box height. Keep the width generous;
-  wrapping inside a line is left to Penpot, not recalculated by the tool.
+- **Text wrapping is approximate.** `wrap: true` is the default: the tool
+  estimates line breaks from the font size and width and writes one
+  `positionData` entry per line. Penpot still owns final layout; a very long word
+  or an unusual font can differ. Set `wrap: false` for exact explicit lines.
+- **Images have two sources.** `path` uploads a local file through the multipart
+  RPC; `url` asks the Penpot server to fetch a public URL. Penpot blocks private
+  addresses, so a LAN URL is rejected even when DSH can reach it.
+- **Preview is best-effort.** `penpot_frame_svg` covers frames, rects, circles,
+  text, groups and solid styles; image bytes and paths are placeholders/omitted.
+  `penpot_frame_png` needs the headless browser path configured on the Plugins
+  page and renders the same SVG, not Penpot's exact canvas.
 - **Text is a rich-text tree.** `shape.content` is not a string. `penpot_outline`
   already extracts it; for raw JSON use the recursion in
   `references/shapes.md`.
@@ -102,13 +115,32 @@ rule, the measured value and the layer id; do not silently change the design.
    coordinates, so add the frame's `x`/`y` to the intended inside position.
 4. `penpot_add_text` for copy; pass `fontSize`, `fontWeight`, `color`, `align`.
 5. `penpot_add_circle` for avatars or decorative dots.
-6. `penpot_outline` with `rootId` = frame id, then `penpot_audit`.
-7. Fix copy with `penpot_update_text`; adjust fill, radius, opacity, name or
+6. `penpot_add_image` for a cover/photo; use a local `path` when a URL is not
+   publicly reachable by the Penpot server.
+7. `penpot_group_shapes` for a repeated cluster; `penpot_ungroup_shape` reverses
+   it. `penpot_outline` with `rootId` = frame id, then `penpot_audit`.
+8. Fix copy with `penpot_update_text`; adjust fill, radius, opacity, name or
    geometry with `penpot_update_shape`; remove a trial layer with
    `penpot_delete_shape`.
+9. Preview with `penpot_frame_svg`; use `penpot_frame_png` only when a headless
+   browser is configured. Treat both as a fidelity check, not a Penpot screenshot.
 
 A rectangle added after text sits on top; use `index` to control stacking
 (`0` is the bottom) or add backgrounds first.
+
+### Understand components and prototypes
+`penpot_components` lists components; pass `componentId` to inspect its main
+instance tree. `penpot_component_instances` finds usages.
+`penpot_prototype` reads flows and shape interactions. `penpot_create_flow`
+starts a flow at a frame; `penpot_add_interaction` appends a click/navigation,
+overlay, back or open-url action. Components are read-only in this release.
+
+### Preview a frame
+`penpot_frame_svg` writes an SVG without any browser. For PNG, configure the
+headless browser path in the Plugins page and call `penpot_frame_png`. The
+renderer covers the shapes the plugin creates; it does not reproduce gradients,
+shadows, masks, booleans, custom paths or live component expansion. Report the
+`limitations` list rather than implying a pixel-perfect export.
 
 ### Address feedback
 `penpot_comments` lists threads. Pass a `threadId` to read replies; use the
@@ -139,12 +171,15 @@ not proxy that route, the export fails after Penpot answers 200. See
   builds return no `pages` array from `get-file-summary`.
 - A large file makes `get-file` expensive. Prefer tools that accept `pageId`
   (`penpot_outline`, `penpot_find`, `penpot_audit`).
-- Shape writes cover **frames, rectangles, circles, text, property updates and
-  delete**. Moving a frame shifts its descendants; resizing a frame does not.
-  Groups, booleans, paths, images and component instances need the raw
+- Shape writes cover **frames, rectangles, circles, text, images, groups,
+  property updates and delete**. Moving a frame shifts its descendants; resizing
+  a frame does not. Paths, booleans and component creation still need the raw
   `update-file` format; see `references/write.md`.
-- Comment write covers thread creation, replies and resolve. Editing an existing
-  comment is not exposed.
+- Comment write covers thread creation, replies, editing, deletion and resolve.
+- Component support is read-only. `penpot_components` inspects the main
+  instance when the component object map is not returned.
+- Frame preview is an approximation. `penpot_frame_png` requires a user-provided
+  browser; no browser is bundled.
 - This skill documents Penpot 2.x RPC behavior, tested with 2.18.6. A shape or
   command change is a compatibility event; widen testing or cut a release.
 
@@ -155,5 +190,6 @@ not proxy that route, the export fails after Penpot answers 200. See
 | `references/rpc.md` | Exact commands, params and response shape |
 | `references/shapes.md` | Penpot shape/text data model and coordinates |
 | `references/write.md` | `update-file` change format and safe write recipes |
+| `references/preview.md` | SVG/PNG preview, renderer limits and browser config |
 | `references/design-to-code.md` | Turning a Penpot frame into implementation |
 | `references/troubleshooting.md` | Auth, 4xx/5xx, SSE, export, revision conflicts |

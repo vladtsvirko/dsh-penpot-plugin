@@ -66,8 +66,9 @@ to the project's convention and remove unused entries.
   typography, not the raw line coordinates, to reconstruct copy.
 - Frames can be nested. A "card" frame's children are relative to the page in
   data but visually relative to the card; preserve the visual nesting.
-- Images and paths are referenced, not embedded. The plugin does not download
-  media; ask the user for assets or export the file for asset extraction.
+- Images and paths are referenced, not embedded. `penpot_download_asset` can
+  fetch an asset when the deployment proxies `/assets/by-id/`; otherwise ask the
+  user for assets or export the file for extraction.
 - A color used once may be a one-off, not a token. Do not promote every hex to a
   design token.
 - The audit's contrast result is approximate when the background is a gradient,

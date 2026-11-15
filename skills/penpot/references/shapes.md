@@ -131,7 +131,8 @@ Gradient fills use a different map (`fillColorGradient`); do not assume
 
 - `group` and `bool` are containers with `shapes`.
 - `path` carries path data; do not try to reconstruct it from bounds.
-- `image` shapes reference media by id; the plugin does not download media.
+- `image` shapes reference media by id; use `penpot_add_image` to upload and
+  `penpot_download_asset` to fetch bytes when the asset proxy exists.
 - `component` instances/`component` main instances have extra fields. Inspect
   them, but do not clone a component by copying its map blindly; copy the file
   or use Penpot's own duplication.

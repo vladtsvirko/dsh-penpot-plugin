@@ -13,13 +13,16 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { createApiBackend } from './api-backend.js'
 import type { PenpotBackend, PenpotFileData, PenpotPage, PenpotRef, PenpotShape } from './backend.js'
-import { auditPage, childrenOf, renderAudit, renderFind, renderOutline, renderPages, renderTokens } from './design.js'
-import { createCircle, createFrame, createRect, createText, ROOT_ID, updateTextShape } from './shapes.js'
+import { auditPage, childrenOf, renderAudit, renderFind, renderOutline, renderPages, renderTokens, shapeText } from './design.js'
+import { renderSvgToPng } from './preview.js'
+import { renderFrameSvg } from './render.js'
+import { createCircle, createFrame, createGroup, createImage, createRect, createText, ROOT_ID, updateTextShape } from './shapes.js'
 import type { TextStyle } from './shapes.js'
 import { registerPenpotSkill } from './skill.js'
 
@@ -33,16 +36,21 @@ export const inject = ['tools', 'skills']
 export const Config: Schema<PenpotPluginConfigInput, PenpotPluginConfig> = Schema.object({
   apiUrl: Schema.string().default('').volatile(),
   token: Schema.string().default('').volatile(),
+  // Optional Chrome/Chromium/Edge executable used by penpot_frame_png. The SVG
+  // tool works without it; the plugin never bundles a browser.
+  browserPath: Schema.string().default('').volatile(),
 })
 
 export interface PenpotPluginConfigInput {
   apiUrl?: string
   token?: string
+  browserPath?: string
 }
 
 export interface PenpotPluginConfig {
   apiUrl: Volatile<string>
   token: Volatile<string>
+  browserPath: Volatile<string>
 }
 
 /** Render one list result: id and name per line, backend in parentheses. */
@@ -699,6 +707,210 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'penpot_prototype',
+    description: 'Read prototype flows and shape interactions, optionally for one page.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to every page.' },
+    },
+    output: textOutput('Flows and interactions.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const pages = args.pageId === undefined
+        ? Object.values(file.data.pagesIndex)
+        : [pageOf(file, args.pageId)]
+      const lines = [`# Prototype — file ${args.fileId}`]
+      for (const page of pages) {
+        const flows = Object.entries(page.flows ?? {})
+        const interactions: Array<{ shape: PenpotShape; interaction: Record<string, unknown> }> = []
+        for (const shape of Object.values(page.objects)) {
+          if (!Array.isArray(shape['interactions'])) continue
+          for (const interaction of shape['interactions'] as unknown[]) {
+            if (interaction !== null && typeof interaction === 'object') interactions.push({ shape, interaction: interaction as Record<string, unknown> })
+          }
+        }
+        if (flows.length === 0 && interactions.length === 0) continue
+        lines.push('', `Page ${page.name} (${page.id})`)
+        for (const [id, flow] of flows) {
+          const startingFrame = String(flow['startingFrame'] ?? flow['starting-frame'] ?? '')
+          const frame = page.objects[startingFrame]
+          lines.push(`- flow ${id} “${String(flow['name'] ?? '')}” → ${frame?.name ?? startingFrame} (${startingFrame})`)
+        }
+        for (const { shape, interaction } of interactions) {
+          const event = String(interaction['event-type'] ?? interaction['eventType'] ?? '?')
+          const action = String(interaction['action-type'] ?? interaction['actionType'] ?? '?')
+          const destination = String(interaction['destination'] ?? '')
+          const url = String(interaction['url'] ?? '')
+          lines.push(`- interaction ${shape.id} “${shape.name}” · ${event} → ${action}${destination.length === 0 ? '' : ` ${destination}`}${url.length === 0 ? '' : ` ${url}`}`)
+        }
+      }
+      if (lines.length === 1) lines.push('', 'No flows or interactions.')
+      return { text: lines.join('\n') }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_create_flow',
+    description: 'Create a prototype flow starting at a frame.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      startingFrameId: { type: 'string', required: true, description: 'Frame uuid where the flow starts.' },
+      name: { type: 'string', description: 'Flow name; default "Flow".' },
+    },
+    output: idOutput('created flow'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const frame = page.objects[args.startingFrameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.startingFrameId} is not on page ${page.id}`)
+      const id = randomUUID()
+      await backend.updateFile({
+        fileId: file.id,
+        revn: file.revn,
+        vern: file.vern,
+        changes: [{
+          type: 'set-flow',
+          'page-id': page.id,
+          id,
+          params: { id, name: args.name ?? 'Flow', 'starting-frame': args.startingFrameId },
+        }],
+      })
+      return { id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_add_interaction',
+    description: 'Append a prototype interaction to a shape. Supports navigate, open-overlay, close-overlay, prev-screen and open-url.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      shapeId: { type: 'string', required: true, description: 'Trigger shape uuid.' },
+      eventType: { type: 'string', required: true, description: 'click, mouse-press, mouse-over, mouse-enter, mouse-leave or after-delay.' },
+      actionType: { type: 'string', required: true, description: 'navigate, open-overlay, close-overlay, prev-screen or open-url.' },
+      destination: { type: 'string', description: 'Destination frame uuid for navigate/open-overlay.' },
+      url: { type: 'string', description: 'URL for open-url.' },
+    },
+    output: idOutput('added interaction to'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const found = locateShape(file, args.shapeId)
+      if (found === undefined) throw new Error(`shape ${args.shapeId} is not in file ${args.fileId}`)
+      const events = ['click', 'mouse-press', 'mouse-over', 'mouse-enter', 'mouse-leave', 'after-delay']
+      const actions = ['navigate', 'open-overlay', 'close-overlay', 'prev-screen', 'open-url']
+      if (!events.includes(args.eventType)) throw new Error(`eventType must be one of ${events.join(', ')}`)
+      if (!actions.includes(args.actionType)) throw new Error(`actionType must be one of ${actions.join(', ')}`)
+      if ((args.actionType === 'navigate' || args.actionType === 'open-overlay') && args.destination === undefined) {
+        throw new Error(`${args.actionType} needs destination`)
+      }
+      if (args.actionType === 'open-url' && args.url === undefined) throw new Error('open-url needs url')
+      if (args.destination !== undefined && found.page.objects[args.destination] === undefined) {
+        throw new Error(`destination ${args.destination} is not on page ${found.page.id}`)
+      }
+      const interactions = Array.isArray(found.shape['interactions']) ? found.shape['interactions'] : []
+      const next = [...interactions, {
+        'event-type': args.eventType,
+        'action-type': args.actionType,
+        ...(args.destination === undefined ? {} : { destination: args.destination }),
+        ...(args.url === undefined ? {} : { url: args.url }),
+      }]
+      await backend.updateFile({
+        fileId: file.id,
+        revn: file.revn,
+        vern: file.vern,
+        changes: [{
+          type: 'mod-obj',
+          id: found.shape.id,
+          'page-id': found.page.id,
+          operations: [{ type: 'assign', value: { interactions: next } }],
+        }],
+      })
+      return { id: found.shape.id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_components',
+    description: 'List the components in a file, or inspect one component\'s layer tree. Components are read-only in this release.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      componentId: { type: 'string', description: 'Optional component uuid to inspect its objects.' },
+      query: { type: 'string', description: 'Optional case-insensitive name/path filter.' },
+      limit: { type: 'number', description: 'Maximum components to list; default 100.' },
+    },
+    output: textOutput('Components or one component outline.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const components = file.data.components ?? {}
+      if (args.componentId !== undefined) {
+        const component = components[args.componentId]
+        if (component === undefined) throw new Error(`component ${args.componentId} is not in file ${args.fileId}`)
+        const objects = (component['objects'] ?? {}) as Record<string, PenpotShape>
+        const mainPageId = typeof component['mainInstancePage'] === 'string' ? component['mainInstancePage'] : undefined
+        const mainInstanceId = typeof component['mainInstanceId'] === 'string' ? component['mainInstanceId'] : undefined
+        const mainPage = mainPageId === undefined ? undefined : file.data.pagesIndex[mainPageId]
+        if (Object.keys(objects).length > 0) {
+          const page: PenpotPage = { id: args.componentId, name: String(component['name'] ?? 'Component'), objects }
+          return { text: `Component ${String(component['name'] ?? '')} (${args.componentId})\n${renderOutline(page, { depth: 5, maxShapes: 300 })}` }
+        }
+        if (mainPage !== undefined && mainInstanceId !== undefined && mainPage.objects[mainInstanceId] !== undefined) {
+          return { text: `Component ${String(component['name'] ?? '')} (${args.componentId})\n${renderOutline(mainPage, { rootId: mainInstanceId, depth: 5, maxShapes: 300 })}` }
+        }
+        return { text: `Component ${String(component['name'] ?? '')} (${args.componentId})\nNo object data exposed; main instance ${mainInstanceId ?? '?'} on page ${mainPageId ?? '?'}.` }
+      }
+      const query = (args.query ?? '').trim().toLowerCase()
+      const entries = Object.entries(components).filter(([, component]) => query.length === 0
+        || String(component['name'] ?? '').toLowerCase().includes(query)
+        || String(component['path'] ?? '').toLowerCase().includes(query))
+      const shown = entries.slice(0, Math.max(1, Math.min(500, Math.floor(args.limit ?? 100))))
+      const lines = [`# Components — file ${args.fileId}`, `${String(shown.length)} of ${String(entries.length)} component${entries.length === 1 ? '' : 's'}${query.length === 0 ? '' : ` matching “${args.query ?? ''}”`}`]
+      for (const [id, component] of shown) {
+        const objectCount = Object.keys((component['objects'] ?? {}) as Record<string, unknown>).length
+        lines.push(`- ${id} “${String(component['name'] ?? '')}”${typeof component['path'] === 'string' && component['path'].length > 0 ? ` · ${component['path']}` : ''} · main ${String(component['mainInstanceId'] ?? '?')} · ${String(objectCount)} object${objectCount === 1 ? '' : 's'}`)
+      }
+      if (entries.length === 0) lines.push('', 'No components in this file.')
+      else if (entries.length > shown.length) lines.push('', `… ${String(entries.length - shown.length)} more; raise limit or add query.`)
+      return { text: lines.join('\n') }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_component_instances',
+    description: 'List shapes that are instances of a component, across the file\'s pages.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      componentId: { type: 'string', description: 'Optional component uuid; omit for every instance.' },
+      limit: { type: 'number', description: 'Maximum instances to list; default 100.' },
+    },
+    output: textOutput('Component instances.'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const lines = [`# Component instances — file ${args.fileId}`]
+      const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)))
+      let count = 0
+      let shown = 0
+      for (const page of Object.values(file.data.pagesIndex)) {
+        for (const shape of Object.values(page.objects)) {
+          const componentId = typeof shape['componentId'] === 'string' ? shape['componentId'] : undefined
+          if (componentId === undefined || (args.componentId !== undefined && componentId !== args.componentId)) continue
+          count += 1
+          if (shown >= limit) continue
+          shown += 1
+          const frame = shape.frameId === undefined ? undefined : page.objects[shape.frameId]?.name
+          lines.push(`- ${shape.id} “${shape.name}” · component ${componentId}${frame === undefined ? '' : ` · frame ${frame}`}`)
+        }
+      }
+      lines.push(`${String(count)} instance${count === 1 ? '' : 's'}${count > shown ? `; showing ${String(shown)}` : ''}`)
+      return { text: lines.join('\n') }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'penpot_add_frame',
     description: 'Create a top-level frame (artboard) on a page. x/y are page coordinates; returns the new frame id. Use penpot_add_rect/text with this id for children.',
     parameters: {
@@ -822,6 +1034,159 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'penpot_group_shapes',
+    description: 'Group two or more sibling shapes from the same frame. Children keep page coordinates; the group gets their union bounds.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      shapeIds: { type: 'array', required: true, description: 'Shape uuids to group; all must share one frame.', items: { type: 'string' } },
+      name: { type: 'string', description: 'Group name; default "Group".' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      index: { type: 'number', description: 'Insertion index in the frame; defaults to the lowest selected index.' },
+    },
+    output: idOutput('created group'),
+    async execute(args) {
+      if (args.shapeIds.length < 2) throw new Error('penpot_group_shapes needs at least two shape ids')
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const selected = args.shapeIds.map((id) => page.objects[id])
+      if (selected.some((shape) => shape === undefined)) throw new Error('one or more shapes are not on the selected page')
+      const shapes = selected as PenpotShape[]
+      if (shapes.some((shape) => shape.id === ROOT_ID)) throw new Error('the page root cannot be grouped')
+      const frameId = shapes[0]?.frameId
+      if (frameId === undefined || shapes.some((shape) => shape.frameId !== frameId || shape.parentId !== frameId)) {
+        throw new Error('grouped shapes must be direct children of the same frame')
+      }
+      const frame = page.objects[frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${frameId} is not on page ${page.id}`)
+      const frameOrder = Array.isArray(frame.shapes) ? frame.shapes : []
+      const orderedIds = frameOrder.filter((id) => args.shapeIds.includes(id))
+      const indexes = orderedIds.map((id) => frameOrder.indexOf(id)).filter((index) => index >= 0)
+      const index = args.index ?? (indexes.length === 0 ? frameOrder.length : Math.min(...indexes))
+      const minX = Math.min(...shapes.map((shape) => shape.x))
+      const minY = Math.min(...shapes.map((shape) => shape.y))
+      const maxX = Math.max(...shapes.map((shape) => shape.x + shape.width))
+      const maxY = Math.max(...shapes.map((shape) => shape.y + shape.height))
+      const id = randomUUID()
+      const group = createGroup({
+        id,
+        name: args.name ?? 'Group',
+        pageId: page.id,
+        frameId,
+        childIds: orderedIds,
+        bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+      })
+      const remaining = frameOrder.filter((shapeId) => !orderedIds.includes(shapeId))
+      const nextFrameShapes = [...remaining.slice(0, index), id, ...remaining.slice(index)]
+      await backend.updateFile({
+        fileId: file.id,
+        revn: file.revn,
+        vern: file.vern,
+        changes: [
+          { type: 'add-obj', id, 'page-id': page.id, 'frame-id': frameId, 'parent-id': frameId, index, obj: group },
+          { type: 'mod-obj', id: frameId, 'page-id': page.id, operations: [{ type: 'assign', value: { shapes: nextFrameShapes } }] },
+          ...orderedIds.map((shapeId) => ({
+            type: 'mod-obj',
+            id: shapeId,
+            'page-id': page.id,
+            operations: [{ type: 'assign', value: { parentId: id, frameId } }],
+          })),
+        ],
+      })
+      return { id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_ungroup_shape',
+    description: 'Move a group\'s children back to its frame and delete the group.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      shapeId: { type: 'string', required: true, description: 'Group uuid.' },
+    },
+    output: idOutput('ungrouped'),
+    async execute(args) {
+      const backend = requireBackend()
+      const file = await backend.fileData(args.fileId)
+      const found = locateShape(file, args.shapeId)
+      if (found === undefined) throw new Error(`shape ${args.shapeId} is not in file ${args.fileId}`)
+      if (found.shape.type !== 'group') throw new Error(`shape ${args.shapeId} is ${found.shape.type}, not a group`)
+      const frameId = found.shape.frameId
+      const frame = frameId === undefined ? undefined : found.page.objects[frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error('the group has no parent frame')
+      const children = Array.isArray(found.shape.shapes) ? found.shape.shapes : []
+      const frameOrder = Array.isArray(frame.shapes) ? frame.shapes : []
+      const nextFrameShapes = frameOrder.flatMap((shapeId) => shapeId === found.shape.id ? children : [shapeId])
+      await backend.updateFile({
+        fileId: file.id,
+        revn: file.revn,
+        vern: file.vern,
+        changes: [
+          { type: 'mod-obj', id: found.shape.id, 'page-id': found.page.id, operations: [{ type: 'assign', value: { shapes: [] } }] },
+          { type: 'mod-obj', id: frameId, 'page-id': found.page.id, operations: [{ type: 'assign', value: { shapes: nextFrameShapes } }] },
+          ...children.map((shapeId) => ({
+            type: 'mod-obj',
+            id: shapeId,
+            'page-id': found.page.id,
+            operations: [{ type: 'assign', value: { parentId: frameId, frameId } }],
+          })),
+          { type: 'del-obj', id: found.shape.id, 'page-id': found.page.id },
+        ],
+      })
+      return { id: found.shape.id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_add_image',
+    description: 'Upload an image from a local path or URL, then place it inside a frame. Use a path for a file reachable by the DSH host; use a public URL only when the Penpot server can fetch it (private addresses are blocked by Penpot SSRF rules).',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Containing frame uuid.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+      path: { type: 'string', description: 'Absolute local image path. Give exactly one of path or url.' },
+      url: { type: 'string', description: 'Public image URL the Penpot server can fetch. Give exactly one of path or url.' },
+      name: { type: 'string', description: 'Layer and media name; default "Image".' },
+      x: { type: 'number', required: true, description: 'Page x coordinate.' },
+      y: { type: 'number', required: true, description: 'Page y coordinate.' },
+      width: { type: 'number', description: 'Width; defaults to the image width. With only one dimension the aspect ratio is preserved.' },
+      height: { type: 'number', description: 'Height; defaults to the image height. With only one dimension the aspect ratio is preserved.' },
+      index: { type: 'number', description: 'Insertion index in the frame; defaults to the end (top).' },
+    },
+    output: idOutput('created image'),
+    async execute(args) {
+      if ((args.path === undefined) === (args.url === undefined)) throw new Error('penpot_add_image needs exactly one of path or url')
+      const backend = requireBackend()
+      const name = args.name ?? 'Image'
+      const media = args.path !== undefined
+        ? await backend.uploadMedia({ fileId: args.fileId, path: args.path, name, isLocal: false })
+        : await backend.createMediaFromUrl({ fileId: args.fileId, url: args.url ?? '', name, isLocal: false })
+      if (media.width <= 0 || media.height <= 0) throw new Error('Penpot did not report image dimensions')
+      const ratio = media.width / media.height
+      const width = args.width ?? (args.height === undefined ? media.width : args.height * ratio)
+      const height = args.height ?? (args.width === undefined ? media.height : args.width / ratio)
+      const file = await backend.fileData(args.fileId)
+      const page = pageOf(file, args.pageId)
+      const frame = page.objects[args.frameId]
+      if (frame === undefined || frame.type !== 'frame') throw new Error(`frame ${args.frameId} is not on page ${page.id}`)
+      const id = randomUUID()
+      const shape = createImage({
+        id,
+        name,
+        pageId: page.id,
+        frameId: args.frameId,
+        x: args.x,
+        y: args.y,
+        width,
+        height,
+        media,
+      })
+      await addShape(backend, file, page, shape, args.frameId, args.index)
+      return { id }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'penpot_add_text',
     description: 'Add a text layer inside a frame. x/y are page coordinates. Each explicit newline becomes a positioned line; keep width generous and use height to size the box.',
     parameters: {
@@ -841,6 +1206,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       letterSpacing: { type: 'number', description: 'Letter spacing in px; default 0.' },
       color: { type: 'string', description: 'Text color; default #111827.' },
       align: { type: 'string', description: 'left, right, center or justify; default left.' },
+      wrap: { type: 'boolean', description: 'Approximate wrapping inside width; default true.' },
       index: { type: 'number', description: 'Insertion index in the frame; defaults to the end (top).' },
     },
     output: idOutput('created text'),
@@ -862,6 +1228,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
         ...(args.height === undefined ? {} : { height: args.height }),
         text: args.text,
         style: textStyleFrom(args),
+        ...(args.wrap === undefined ? {} : { wrap: args.wrap }),
       })
       await addShape(backend, file, page, shape, args.frameId, args.index)
       return { id }
@@ -884,6 +1251,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       letterSpacing: { type: 'number', description: 'Override letter spacing in px.' },
       color: { type: 'string', description: 'Override text color.' },
       align: { type: 'string', description: 'Override left, right, center or justify.' },
+      wrap: { type: 'boolean', description: 'Approximate wrapping inside width; default true.' },
     },
     output: idOutput('updated text'),
     async execute(args) {
@@ -895,6 +1263,7 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       const updated = updateTextShape(found.shape, args.text, textStyleFrom(args), {
         ...(args.width === undefined ? {} : { width: args.width }),
         ...(args.height === undefined ? {} : { height: args.height }),
+        ...(args.wrap === undefined ? {} : { wrap: args.wrap }),
       })
       const height = updated.height
       const width = updated.width
@@ -1026,14 +1395,23 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       if (shape.type === 'text' && geometryChanged) {
         const dx = x - shape.x
         const dy = y - shape.y
-        const entries = Array.isArray(shape.positionData) ? shape.positionData : []
-        if (entries.length > 0) {
-          value.positionData = entries.map((entry) => ({
-            ...entry,
-            x: Number(entry['x'] ?? shape.x) + dx,
-            y: Number(entry['y'] ?? shape.y) + dy,
-            ...(width === shape.width ? {} : { width, x2: width }),
-          }))
+        if (width !== shape.width) {
+          const rewrapped = updateTextShape(shape, shapeText(shape), {}, {
+            width,
+            ...(args.height === undefined ? {} : { height: args.height }),
+          })
+          value.content = rewrapped.content
+          value.positionData = rewrapped.positionData
+          value.height = rewrapped.height
+        } else {
+          const entries = Array.isArray(shape.positionData) ? shape.positionData : []
+          if (entries.length > 0) {
+            value.positionData = entries.map((entry) => ({
+              ...entry,
+              x: Number(entry['x'] ?? shape.x) + dx,
+              y: Number(entry['y'] ?? shape.y) + dy,
+            }))
+          }
         }
       }
       if (args.fill !== undefined) value.fills = [{ fillColor: args.fill, fillOpacity: 1 }]
@@ -1139,6 +1517,35 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'penpot_update_comment',
+    description: 'Edit the text of an existing comment.',
+    parameters: {
+      commentId: { type: 'string', required: true, description: 'Comment uuid from penpot_comments.' },
+      content: { type: 'string', required: true, description: 'New comment text.' },
+    },
+    output: idOutput('updated comment'),
+    async execute(args) {
+      const backend = requireBackend()
+      await backend.updateComment({ commentId: args.commentId, content: args.content })
+      return { id: args.commentId }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_delete_comment',
+    description: 'Delete an existing comment. This removes the message, not the whole thread.',
+    parameters: {
+      commentId: { type: 'string', required: true, description: 'Comment uuid from penpot_comments.' },
+    },
+    output: idOutput('deleted comment'),
+    async execute(args) {
+      const backend = requireBackend()
+      await backend.deleteComment({ commentId: args.commentId })
+      return { id: args.commentId }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'penpot_resolve_comment',
     description: 'Mark a comment thread resolved or open.',
     parameters: {
@@ -1151,6 +1558,107 @@ export function apply(ctx: Context, config: PenpotPluginConfig): void {
       const resolved = args.resolved ?? true
       await backend.setCommentThreadResolved({ threadId: args.threadId, resolved })
       return { text: `${resolved ? 'resolved' : 'reopened'} comment thread ${args.threadId}` }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_frame_svg',
+    description: 'Render a frame to a best-effort SVG on disk. Supports frames, rects, circles, text and groups with solid fills, strokes and radii; images are placeholders and paths/effects are omitted.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Frame uuid.' },
+      path: { type: 'string', required: true, description: 'Absolute path to write the .svg.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true, description: 'Where the SVG was written.' },
+          bytes: { type: 'number', required: true, description: 'Size in bytes.' },
+          limitations: { type: 'array', required: true, description: 'Features replaced or omitted.', items: { type: 'string' } },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `${value.path} (${String(value.bytes)} bytes)${value.limitations.length === 0 ? '' : `\nlimitations: ${value.limitations.join('; ')}`}` }],
+    },
+    async execute(args) {
+      const backend = requireBackend()
+      const page = await backend.page(args.fileId, args.pageId)
+      const render = renderFrameSvg(page, args.frameId)
+      await writeFile(args.path, render.svg, 'utf8')
+      return { path: args.path, bytes: Buffer.byteLength(render.svg), limitations: render.limitations }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_frame_png',
+    description: 'Render a frame to PNG using the headless browser path configured on the Plugins page. The browser renders the plugin SVG, so the result is a best-effort preview, not Penpot\'s exact canvas renderer.',
+    parameters: {
+      fileId: { type: 'string', required: true, description: 'File uuid.' },
+      frameId: { type: 'string', required: true, description: 'Frame uuid.' },
+      path: { type: 'string', required: true, description: 'Absolute path to write the .png.' },
+      pageId: { type: 'string', description: 'Page uuid; defaults to the first page.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true, description: 'Where the PNG was written.' },
+          bytes: { type: 'number', required: true, description: 'Size in bytes.' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `${value.path} (${String(value.bytes)} bytes)` }],
+    },
+    async execute(args) {
+      const browserPath = config.browserPath.get()
+      if (browserPath.length === 0) {
+        throw new Error('penpot_frame_png needs a headless browser: set the browser path on the Plugins page, or use penpot_frame_svg')
+      }
+      const backend = requireBackend()
+      const page = await backend.page(args.fileId, args.pageId)
+      const render = renderFrameSvg(page, args.frameId)
+      const result = await renderSvgToPng({
+        svg: render.svg,
+        width: render.width,
+        height: render.height,
+        path: args.path,
+        browserPath,
+      })
+      return { path: args.path, bytes: result.bytes }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'penpot_download_asset',
+    description: 'Download a Penpot asset/media id to disk. Requires the deployment to proxy /assets/by-id/ to the backend.',
+    parameters: {
+      assetId: { type: 'string', required: true, description: 'Asset/media uuid from Penpot object thumbnails or export metadata.' },
+      path: { type: 'string', required: true, description: 'Absolute path to write.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true, description: 'Where the asset was written.' },
+          bytes: { type: 'number', required: true, description: 'Size in bytes.' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `${value.path} (${String(value.bytes)} bytes)` }],
+    },
+    async execute(args) {
+      const apiUrl = config.apiUrl.get()
+      const token = config.token.get()
+      if (apiUrl.length === 0 || token.length === 0) throw new Error('Penpot is not configured')
+      const base = apiUrl.replace(/\/+$/u, '').replace(/\/api\/rpc$/u, '')
+      const url = `${base}/assets/by-id/${encodeURIComponent(args.assetId)}`
+      const response = await fetch(url, { headers: { authorization: `Token ${token}` } })
+      if (!response.ok) throw new Error(`asset download failed: HTTP ${String(response.status)} (the deployment must proxy /assets/by-id/)`)
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      await writeFile(args.path, bytes)
+      return { path: args.path, bytes: bytes.byteLength }
     },
   }))
 

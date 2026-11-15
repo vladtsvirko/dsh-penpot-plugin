@@ -8,7 +8,7 @@
  * it to lib/client.js), so it can read React from the shared module table and
  * keep the form small.
  *
- * The host half (src/index.ts) reads the same two volatile keys from its config;
+ * The host half (src/index.ts) reads the same volatile keys from its config;
  * the page writes them into the profile's user layer, so the next tool call sees
  * them without a restart.
  */
@@ -58,6 +58,7 @@ window.__ModuleLoader__.load({
       const value = (state === undefined ? undefined : state.value) ?? {}
       const [apiUrl, setApiUrl] = React.useState(String(value.apiUrl ?? ''))
       const [token, setToken] = React.useState(String(value.token ?? ''))
+      const [browserPath, setBrowserPath] = React.useState(String(value.browserPath ?? ''))
       const [saving, setSaving] = React.useState(false)
       const [message, setMessage] = React.useState('')
 
@@ -70,6 +71,7 @@ window.__ModuleLoader__.load({
         const next = state === undefined ? {} : (state.value ?? {})
         setApiUrl(String(next.apiUrl ?? ''))
         setToken(String(next.token ?? ''))
+        setBrowserPath(String(next.browserPath ?? ''))
       }, [revision])
 
       if (state === undefined) {
@@ -84,6 +86,7 @@ window.__ModuleLoader__.load({
 
       const savedUrl = String(value.apiUrl ?? '')
       const savedToken = String(value.token ?? '')
+      const savedBrowser = String(value.browserPath ?? '')
       const urlSet = savedUrl.trim().length > 0
       const tokenSet = savedToken.trim().length > 0
       const configured = urlSet && tokenSet
@@ -96,6 +99,7 @@ window.__ModuleLoader__.load({
             [
               { op: 'set', path: ['apiUrl'], value: apiUrl.trim() },
               { op: 'set', path: ['token'], value: token.trim() },
+              { op: 'set', path: ['browserPath'], value: browserPath.trim() },
             ],
             state.revision,
           )
@@ -130,7 +134,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'muted' },
-            `API URL ${urlSet ? 'set' : 'not set'} · Access token ${tokenSet ? 'set' : 'not set'}`,
+            `API URL ${urlSet ? 'set' : 'not set'} · Access token ${tokenSet ? 'set' : 'not set'} · Headless browser ${savedBrowser.trim().length > 0 ? 'set' : 'not set'}`,
           ),
           h('div', { className: 'muted' }, 'Changes are saved to this profile and apply immediately.'),
         ),
@@ -162,6 +166,21 @@ window.__ModuleLoader__.load({
             disabled,
             placeholder: 'Paste the access token',
             onChange: (event) => setToken(event.target.value),
+          }),
+        ),
+        h(
+          Field,
+          {
+            label: 'Headless browser (optional)',
+            hint: 'Absolute path to Chrome, Chromium or Edge for penpot_frame_png. The SVG tool works without it.',
+          },
+          h('input', {
+            type: 'text',
+            className: 'input',
+            value: browserPath,
+            disabled,
+            placeholder: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            onChange: (event) => setBrowserPath(event.target.value),
           }),
         ),
         h(

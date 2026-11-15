@@ -32,8 +32,11 @@ payloads.
   contrast/typography audit. That keeps it testable with a fixture and reusable
   if the transport changes.
 - `shapes.ts` builds the minimal valid Penpot shape maps for frames, rectangles,
-  circles and text, plus the rich-text/`positionData` layout. The tools apply
-  them through one `update-file` change per call.
+  circles, images, groups and text, plus the approximate wrap/`positionData`
+  layout. The tools apply them through one `update-file` change per call.
+- `render.ts` is a best-effort SVG renderer for the shapes the plugin creates;
+  `preview.ts` runs a user-provided headless browser to rasterize that SVG. The
+  browser is never bundled and the result is not Penpot's WASM canvas.
 - `skill.ts` registers `skills/penpot/` on `ctx.skills`; the skill is part of the
   npm package and needs no profile entry.
 - A missing API URL or token (from the Plugins page or the
@@ -51,15 +54,16 @@ leave the host.
 
 ## Open questions
 
-1. **Text metrics.** The writer lays out explicit newlines but does not measure
-   wrapping. A wrapped line can overflow its box; a future version should either
-   request line breaks from the caller or measure with a font-aware layout.
-2. **Advanced primitives.** Groups, booleans, paths, images and component
-   instances still require the raw `update-file` format. Add them only with a
-   schema/template and a fixture.
-3. **Components and prototype flows.** `get-file` carries them, but the 2.18.6
-   test files did not exercise the schema; add only after a component-heavy
-   fixture exists.
+1. **Text metrics.** The writer uses an approximate glyph metric and greedy
+   wrap. A future version should use real font-file metrics where available; the
+   current result is documented as an estimate.
+2. **Advanced primitives.** Booleans, paths and component creation still require
+   the raw `update-file` format. Add them only with a schema/template and a
+   fixture.
+3. **Components and prototype flows.** Components are read-only; creation and
+   instance sync are not exposed. Prototype flows/interactions are read and a
+   subset is writable. Component objects are often not in `get-file`; the tool
+   falls back to the main instance tree.
 4. **Resources.** A file could be exposed as a DSH resource rather than fetched
    through a tool; depends on what DSH's resource surface wants.
 

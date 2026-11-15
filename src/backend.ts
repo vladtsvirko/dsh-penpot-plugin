@@ -57,6 +57,7 @@ export interface PenpotPage {
   id: string
   name: string
   objects: Record<string, PenpotShape>
+  flows?: Record<string, Record<string, unknown>>
 }
 
 /** The parts of a file the design tools read. */
@@ -72,6 +73,7 @@ export interface PenpotFileData {
     pagesIndex: Record<string, PenpotPage>
     tokensLib?: Record<string, unknown>
     typographies?: Record<string, unknown>
+    components?: Record<string, Record<string, unknown>>
   }
 }
 
@@ -119,6 +121,16 @@ export interface PenpotLibrary {
   isIndirect?: boolean
 }
 
+/** A file media object (image/asset). */
+export interface PenpotMedia {
+  id: string
+  mediaId?: string
+  width: number
+  height: number
+  mtype?: string
+  name?: string
+}
+
 /** A built-in Penpot template. */
 export interface PenpotTemplate {
   id: string
@@ -153,6 +165,10 @@ export interface PenpotBackend {
   createProject(input: { teamId: string; name: string }): Promise<PenpotRef>
   /** Create an empty file in a project. */
   createFile(input: { projectId: string; name: string }): Promise<PenpotRef>
+  /** Upload a local image as a file media object. */
+  uploadMedia(input: { fileId: string; path: string; name?: string; isLocal?: boolean }): Promise<PenpotMedia>
+  /** Download an image URL server-side into a file media object. */
+  createMediaFromUrl(input: { fileId: string; url: string; name?: string; isLocal?: boolean }): Promise<PenpotMedia>
   /** Duplicate a file in its current project/team. */
   duplicateFile(input: { fileId: string; name?: string }): Promise<PenpotRef>
   /** Apply Penpot `update-file` changes against the current revision. */
@@ -175,6 +191,10 @@ export interface PenpotBackend {
   createComment(input: { threadId: string; content: string }): Promise<{ id: string }>
   /** Mark a comment thread resolved or open. */
   setCommentThreadResolved(input: { threadId: string; resolved: boolean }): Promise<void>
+  /** Edit an existing comment. */
+  updateComment(input: { commentId: string; content: string }): Promise<void>
+  /** Delete an existing comment. */
+  deleteComment(input: { commentId: string }): Promise<void>
   /** Clone a built-in template into a project; some templates produce several files. */
   cloneTemplate(input: { projectId: string; templateId: string }): Promise<PenpotRef[]>
   /** Whole-file export as `.penpot` bytes. */

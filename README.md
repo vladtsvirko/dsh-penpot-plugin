@@ -1,8 +1,9 @@
 # dsh-penpot-plugin
 
 Penpot for [DeepSeek Harness](https://github.com/deepseek-ai): discover and
-inspect design files, extract tokens, audit accessibility, draw frames and text,
-read and write feedback, manage versions and files, and export or import
+inspect design files, extract tokens, audit accessibility, draw frames, text,
+images and groups, read and write feedback, inspect components and prototypes,
+preview frames as SVG or PNG, manage versions and files, and export or import
 `.penpot` archives over Penpot's HTTP RPC API.
 
 The plugin is a normal DSH bundle. It talks to a Penpot instance you run
@@ -11,16 +12,17 @@ nothing else.
 
 It also ships a **Penpot skill** (`skills/penpot/`) that the Host registers on
 `ctx.skills`, so the agent gets the workflow and the RPC/shape knowledge without
-a second install. The shape write tools cover frames, rectangles, circles, text
-and deletion; the raw `update-file` format for groups, paths, images and
-component instances is in the skill's `references/write.md`.
+a second install. The write tools cover frames, rectangles, circles, text,
+images, groups, comment threads and prototype flows. Paths, booleans and
+component creation still use the raw `update-file` format documented in the
+skill's `references/write.md`.
 
 ## Install
 
 The plugin is published to npm as an exact version:
 
 ```sh
-dsh plugin --profile <profile> add dsh-penpot-plugin@0.6.1
+dsh plugin --profile <profile> add dsh-penpot-plugin@0.10.0
 ```
 
 The registry tarball contains the built `lib/`, so there is no `prepare` build
@@ -35,7 +37,7 @@ allowBuilds:
 ```
 
 ```sh
-dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.6.1
+dsh plugin --profile <profile> add github:vladtsvirko/dsh-penpot-plugin#v0.10.0
 ```
 
 The package is a plugin bundle: `cordis.patch.yml` mounts one `dsh-penpot` row.
@@ -49,6 +51,9 @@ On DSH `0.2.1-rc.5` or newer, open **Plugins** → **dsh-penpot-plugin** and pre
   (include the port if your instance uses one; no `/api/rpc` suffix;
   `https://…:8443` works when the CA is trusted).
 - **Access token** — create it in Penpot → Settings → Access tokens.
+- **Headless browser (optional)** — absolute path to Chrome, Chromium or Edge.
+  Only `penpot_frame_png` needs it; `penpot_frame_svg` works without a browser.
+  The browser renders the plugin's best-effort SVG, not Penpot's exact canvas.
 
 **Save** writes the row's config into the profile's user layer; the URL and
 token take effect on the next tool call.
@@ -99,13 +104,26 @@ names the endpoint, and a missing value is reported by name.
 | `penpot_add_frame` | create a top-level frame/artboard |
 | `penpot_add_rect` | add a rectangle inside a frame |
 | `penpot_add_circle` | add a circle/ellipse inside a frame |
+| `penpot_add_image` | upload a local image or public URL and place it |
 | `penpot_add_text` | add a text layer with typography and color |
 | `penpot_update_shape` | change name, fill, radius, opacity or geometry |
 | `penpot_update_text` | replace a text layer's copy and re-layout it |
+| `penpot_group_shapes` | group sibling shapes |
+| `penpot_ungroup_shape` | move a group's children back to its frame |
 | `penpot_delete_shape` | delete a layer or a frame subtree |
+| `penpot_components` | list components or inspect one |
+| `penpot_component_instances` | list component instances |
+| `penpot_prototype` | read flows and interactions |
+| `penpot_create_flow` | create a prototype flow |
+| `penpot_add_interaction` | add a click/navigation interaction |
 | `penpot_create_comment_thread` | start a comment thread on a frame |
 | `penpot_reply_comment` | reply to a thread |
+| `penpot_update_comment` | edit a comment |
+| `penpot_delete_comment` | delete a comment |
 | `penpot_resolve_comment` | resolve or reopen a thread |
+| `penpot_frame_svg` | render a frame to best-effort SVG |
+| `penpot_frame_png` | render a frame to PNG via the configured browser |
+| `penpot_download_asset` | download an asset id when `/assets/by-id/` is proxied |
 | `penpot_export` | write a `.penpot` file to disk |
 | `penpot_import` | upload a `.penpot` file as a new or replacement file |
 
@@ -120,13 +138,20 @@ themes, aliases) and the colors, typography and radii actually used on a page.
 `px` values.
 
 Shape writes take **page coordinates**, matching `penpot_outline`: if a frame is
-at `x=430`, a child 24px inside it is `x=454`. `penpot_add_text` creates one
-positioned line per explicit newline and computes the box height, but does not
-measure wrapped text; keep the box wide enough. `penpot_update_shape` changes
-fill, radius, opacity, name or geometry; moving a frame also shifts its
-descendants, while resizing a frame does not. Take a snapshot before a batch or
-a delete. The add tools return the new shape id; use `penpot_outline` on the
-frame to verify.
+at `x=430`, a child 24px inside it is `x=454`. Text uses an approximate wrap by
+default (`wrap: true`); turn it off with `wrap: false` for exact explicit lines.
+`penpot_update_shape` changes fill, radius, opacity, name or geometry; moving a
+frame also shifts its descendants, while resizing a frame does not. Take a
+snapshot before a batch or a delete. The add tools return the new shape id; use
+`penpot_outline` on the frame to verify.
+
+Images can come from a local path or a public URL. Penpot blocks private/SSRF
+targets, so a URL only works when the Penpot server can fetch it; a local path
+is uploaded through the multipart RPC. Frame preview is deliberately
+best-effort: the SVG renderer covers frames, rects, circles, text, groups and
+solid styles, and the PNG tool sends that SVG through the configured browser.
+Neither is Penpot's own canvas renderer; paths, effects and real image bytes are
+not reproduced yet.
 
 Export gives a zip of Penpot JSON: unzip it, read or edit with the normal file
 tools, then import it back with `penpot_import` — no extra CLI and no second
@@ -147,8 +172,9 @@ versioning and export/import, and carries the RPC and shape notes in
 
 - `rpc.md` — commands, params, SSE/transit, export/import;
 - `shapes.md` — shape/text data model, absolute coordinates, `positionData`;
-- `write.md` — `update-file` changes, geometry and text recipes;
+- `write.md` — `update-file` changes, geometry, text, images and groups;
 - `design-to-code.md` — mapping a frame to implementation;
+- `preview.md` — SVG/PNG preview fidelity and browser configuration;
 - `troubleshooting.md` — auth, 4xx/5xx, export proxy, revision conflicts.
 
 If the catalog does not show `penpot` after install, confirm the Host row is

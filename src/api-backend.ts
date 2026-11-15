@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import type {
   PenpotBackend,
+  PenpotMedia,
   PenpotComment,
   PenpotCommentThread,
   PenpotFileData,
@@ -196,6 +197,7 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
           pagesIndex,
           ...(data['tokensLib'] === undefined ? {} : { tokensLib: data['tokensLib'] as Record<string, unknown> }),
           ...(data['typographies'] === undefined ? {} : { typographies: data['typographies'] as Record<string, unknown> }),
+          ...(data['components'] === undefined ? {} : { components: data['components'] as Record<string, Record<string, unknown>> }),
         },
       }
     },
@@ -210,6 +212,7 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
         id: String(raw['id'] ?? pageId ?? ''),
         name: String(raw['name'] ?? ''),
         objects: (raw['objects'] ?? {}) as Record<string, PenpotShape>,
+        ...(raw['flows'] === undefined ? {} : { flows: raw['flows'] as Record<string, Record<string, unknown>> }),
       }
     },
 
@@ -302,6 +305,53 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
       return { id: String(raw['id'] ?? ''), name: String(raw['name'] ?? name) }
     },
 
+    async uploadMedia({ fileId, path, name, isLocal }) {
+      const bytes = await readFile(path)
+      const extension = basename(path).split('.').pop()?.toLowerCase() ?? ''
+      const mime = extension === 'png' ? 'image/png'
+        : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg'
+          : extension === 'webp' ? 'image/webp'
+            : extension === 'gif' ? 'image/gif'
+              : extension === 'svg' ? 'image/svg+xml'
+                : 'application/octet-stream'
+      const form = new FormData()
+      form.set('file-id', fileId)
+      form.set('is-local', String(isLocal ?? false))
+      form.set('name', name ?? basename(path))
+      form.set('content', new Blob([bytes], { type: mime }), basename(path))
+      const response = await fetchImpl(`${base}/api/rpc/command/upload-file-media-object`, { method: 'POST', headers, body: form })
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new PenpotApiError(response.status, text.slice(0, 300).trim())
+      }
+      const raw = await response.json() as Record<string, unknown>
+      return {
+        id: String(raw['id'] ?? ''),
+        ...(typeof raw['mediaId'] === 'string' ? { mediaId: raw['mediaId'] } : {}),
+        width: Number(raw['width'] ?? 0),
+        height: Number(raw['height'] ?? 0),
+        ...(typeof raw['mtype'] === 'string' ? { mtype: raw['mtype'] } : {}),
+        ...(typeof raw['name'] === 'string' ? { name: raw['name'] } : {}),
+      }
+    },
+
+    async createMediaFromUrl({ fileId, url, name, isLocal }) {
+      const raw = await rpcJson<Record<string, unknown>>('create-file-media-object-from-url', {
+        'file-id': fileId,
+        'is-local': isLocal ?? false,
+        url,
+        ...(name === undefined ? {} : { name }),
+      })
+      return {
+        id: String(raw['id'] ?? ''),
+        ...(typeof raw['mediaId'] === 'string' ? { mediaId: raw['mediaId'] } : {}),
+        width: Number(raw['width'] ?? 0),
+        height: Number(raw['height'] ?? 0),
+        ...(typeof raw['mtype'] === 'string' ? { mtype: raw['mtype'] } : {}),
+        ...(typeof raw['name'] === 'string' ? { name: raw['name'] } : {}),
+      }
+    },
+
     async duplicateFile({ fileId, name }) {
       const raw = await rpcJson<Record<string, unknown>>('duplicate-file', {
         'file-id': fileId,
@@ -341,6 +391,14 @@ export function createApiBackend(options: ApiBackendOptions): PenpotBackend {
 
     async setCommentThreadResolved({ threadId, resolved }) {
       await rpc('update-comment-thread', { id: threadId, 'is-resolved': resolved })
+    },
+
+    async updateComment({ commentId, content }) {
+      await rpc('update-comment', { id: commentId, content })
+    },
+
+    async deleteComment({ commentId }) {
+      await rpc('delete-comment', { id: commentId })
     },
 
     async cloneTemplate({ projectId, templateId }) {

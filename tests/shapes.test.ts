@@ -3,11 +3,15 @@ import {
   buildTextContent,
   createCircle,
   createFrame,
+  createGroup,
+  createImage,
   createRect,
   createText,
+  measureTextWidth,
   ROOT_ID,
   textBoxHeight,
   updateTextShape,
+  wrapText,
 } from '../src/shapes.js'
 import type { PenpotShape } from '../src/backend.js'
 
@@ -81,6 +85,27 @@ describe('shape builders', () => {
     expect(updated.positionData[0]).toMatchObject({ text: 'A longer replacement', fontSize: '22px', fontWeight: '600', fontFamily: 'Inter' })
     expect(updated.height).toBeGreaterThan(0)
     expect(updated.width).toBe(342)
+  })
+
+  it('wraps long copy using the approximate metric', () => {
+    const text = 'This is a long sentence that should wrap inside a narrow box.'
+    const lines = wrapText(text, 180, { fontSize: 14 })
+    expect(lines.length).toBeGreaterThan(1)
+    expect(lines.every((line) => measureTextWidth(line, { fontSize: 14 }) <= 181)).toBe(true)
+    const shape = createText({ id: 't', name: 't', pageId: 'p', frameId: 'f', x: 0, y: 0, width: 180, text, style: { fontSize: 14 } })
+    expect(shape.positionData?.length).toBe(lines.length)
+  })
+
+  it('can opt out of wrapping', () => {
+    const shape = createText({ id: 't', name: 't', pageId: 'p', frameId: 'f', x: 0, y: 0, width: 180, text: 'A long line that must stay one line', wrap: false })
+    expect(shape.positionData).toHaveLength(1)
+  })
+
+  it('builds image and group shapes', () => {
+    const image = createImage({ id: 'i', name: 'Image', pageId: 'p', frameId: 'f', x: 10, y: 20, width: 40, height: 30, media: { id: 'media-1', width: 400, height: 300, mtype: 'image/png' } })
+    expect(image).toMatchObject({ type: 'image', parentId: 'f', frameId: 'f', metadata: { id: 'media-1', width: 400, height: 300, mtype: 'image/png' } })
+    const group = createGroup({ id: 'g', name: 'Group', pageId: 'p', frameId: 'f', childIds: ['a', 'b'], bounds: { x: 10, y: 10, width: 100, height: 50 } })
+    expect(group).toMatchObject({ type: 'group', parentId: 'f', shapes: ['a', 'b'], x: 10, y: 10, width: 100, height: 50 })
   })
 
   it('builds content without a shape wrapper', () => {

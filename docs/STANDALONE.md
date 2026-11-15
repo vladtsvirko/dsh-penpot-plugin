@@ -18,7 +18,7 @@ runtime it is installed into.
 
 ```sh
 # Published package: the tarball already contains lib/, so no build script.
-dsh plugin --profile penpot add dsh-penpot-plugin@0.6.1
+dsh plugin --profile penpot add dsh-penpot-plugin@0.10.0
 ```
 
 From the source repository instead, allow the build and pin the tag:
@@ -28,7 +28,7 @@ allowBuilds:
   dsh-penpot-plugin@https://github.com/vladtsvirko/dsh-penpot-plugin.git: true
 ```
 ```sh
-dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.6.1
+dsh plugin --profile penpot add github:vladtsvirko/dsh-penpot-plugin#v0.10.0
 ```
 
 The bundle's own patch inserts the `dsh-penpot` row. On DSH `0.2.1-rc.5` or
@@ -39,6 +39,11 @@ the row's config; no environment export is needed.
 The bundle also registers its `penpot` skill on `ctx.skills`, so the agent has
 the workflow and the RPC notes as soon as the Host row is active. No separate
 skill directory or profile entry is needed.
+
+Frame PNG preview is optional: set **Headless browser** on the Plugins page to
+an absolute Chrome/Chromium/Edge executable. The SVG preview and all other tools
+work without it. The browser renders the plugin's best-effort SVG, not Penpot's
+canvas.
 
 For an older DSH or a headless profile, the row reads both values from the
 runtime environment:

@@ -26,11 +26,14 @@ checked against a live deployment.
 | Create project/file | write | `penpot_create_project`, `penpot_create_file` |
 | Duplicate file | write | `penpot_duplicate_file` |
 | Whole-file export/import | write | `penpot_export`, `penpot_import` |
-| Shape writes | frames, rects, circles, text, property updates, delete | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text`, `penpot_update_text`, `penpot_update_shape`, `penpot_delete_shape` |
-| Advanced shape writes | documented | groups, paths, images, components via `update-file`; skill `references/write.md` |
-| Media / object thumbnail bytes | blocked by deployment | metadata only via `get-file-object-thumbnails` |
-| Per-frame PNG/SVG export | not in RPC | whole-file export only |
-| Components / variants / prototype flows | not exposed | open candidate |
+| Shape writes | frames, rects, circles, text, images, groups, property updates, delete | `penpot_add_frame`, `penpot_add_rect`, `penpot_add_circle`, `penpot_add_text`, `penpot_add_image`, `penpot_group_shapes`, `penpot_ungroup_shape`, `penpot_update_text`, `penpot_update_shape`, `penpot_delete_shape` |
+| Advanced shape writes | documented | paths, booleans, component creation via `update-file`; skill `references/write.md` |
+| Components | read | `penpot_components`, `penpot_component_instances` |
+| Prototype | read + write | `penpot_prototype`, `penpot_create_flow`, `penpot_add_interaction` |
+| Frame preview | SVG + optional PNG | `penpot_frame_svg`, `penpot_frame_png` |
+| Media / object thumbnail bytes | blocked by deployment | `penpot_download_asset` once `/assets/by-id/` is proxied |
+| Per-frame preview | best-effort | `penpot_frame_svg`, `penpot_frame_png` (user browser) |
+| Component creation/sync | not exposed | read/inspect only |
 | Team administration, auth, billing, webhooks, error reports | not exposed | out of scope |
 
 ## Why these boundaries
@@ -46,24 +49,24 @@ outline/audit → update copy → delete.
 The tools deliberately cover the primitives an agent needs to draw and iterate
 a screen. `penpot_update_shape` changes fill, radius, opacity, name and geometry;
 a frame move shifts its descendants, while a frame resize leaves them in place.
-Groups, booleans, paths, images and component instances still require the raw
-change format; adding each needs a reliable schema/template and a component-heavy
-fixture. `update-file` remains the advanced escape hatch, documented in the
-skill.
+Booleans, paths and component creation still require the raw change format;
+adding each needs a reliable schema/template and a component-heavy fixture.
+`update-file` remains the advanced escape hatch, documented in the skill.
 
 ### Comments write
 
 Reading, creating, replying and resolving are exposed. The design decision is
 confirmation: a reply is a message to a human, and resolving a thread closes
-feedback. Keep those actions explicit. Editing or deleting an individual comment
-is not exposed.
+feedback. Keep those actions explicit. Editing and deleting individual comments
+are exposed as explicit tools.
 
 ### Text layout
 
-`penpot_add_text` and `penpot_update_text` create one `positionData` line per
-explicit newline and compute the box height. They do **not** measure wrapped
-text. A very long line stays in one layout box; keep the width generous or split
-the copy. This is the main fidelity limit of the current writer.
+`penpot_add_text` and `penpot_update_text` use an approximate glyph metric and
+greedy word wrapping (`wrap: true`, the default). Each line gets a
+`positionData` entry; `wrap: false` keeps explicit lines. The metric is an
+estimate, not Penpot's font layout: unusual fonts, ligatures and very long words
+can still differ. This is documented as a fidelity limit, not a silent promise.
 
 ### Media and thumbnails
 
@@ -73,8 +76,9 @@ the public origin serves `/assets` as static frontend files and returns an nginx
 404 for that path; the backend ports are not exposed. The same proxy gap blocks
 `export-binfile` downloads. This is a deployment fix, not a plugin feature.
 Per-frame raster export is not an RPC command at all: Penpot renders it in the
-browser with its WASM renderer. The honest options are whole-file export, or a
-browser-side renderer, or waiting for an API.
+browser with its WASM renderer. The plugin offers best-effort SVG and a
+user-configured headless-browser PNG; exact rendering remains a browser-side
+problem.
 
 ### Design tokens
 
@@ -87,11 +91,24 @@ tokens from one-off usage.
 
 ### Components and prototypes
 
-Penpot files can contain components, component sets, variants and prototype
-flows. `get-file` carries them in the file data, but the 2.18.6 test files did
-not exercise them, so this release does not claim a schema. A `penpot_components`
-tool is a good next step once a component-heavy file is available for testing;
-the same applies to prototype flow inspection.
+Components are read-only: `data.components` carries path/name/main instance, and
+the tool inspects the main instance tree when the component object map is not
+returned by `get-file`. Creating components or instances still requires the raw
+`update-file` changes.
+
+Prototype flows are page-level `flows` maps; interactions live on shapes.
+`penpot_prototype` reads both. `penpot_create_flow` uses `set-flow`;
+`penpot_add_interaction` appends to `shape.interactions`. Navigation, overlay,
+back and open-url are supported; animation/overlay positioning are not exposed.
+
+### Frame preview
+
+There is no Penpot per-frame export RPC. `penpot_frame_svg` renders a subset
+(frames, rects, circles, text, groups, solid styles) and reports limitations.
+`penpot_frame_png` sends that SVG through a user-configured headless browser.
+Neither is Penpot's WASM canvas; images are placeholders, paths/effects are
+omitted, and no browser is bundled. `penpot_download_asset` covers direct asset
+bytes once the deployment proxies `/assets/by-id/`.
 
 ## Command inventory
 
@@ -101,12 +118,12 @@ The 2.18.6 RPC has 150 commands. Grouped by area:
 |---|---|---|
 | Teams and projects | `get-teams`, `get-team`, `get-team-members`, `create-team`, `create-project`, `rename-project`, `duplicate-project`, `move-project`, `delete-project` | Admin surface; only project creation is exposed. |
 | Files | `get-project-files`, `get-team-recent-files`, `search-files`, `get-file`, `get-file-summary`, `get-file-info`, `get-file-stats`, `get-page`, `get-file-fragment`, `create-file`, `rename-file`, `duplicate-file`, `move-files`, `delete-file`, `export-binfile`, `import-binfile` | Core plugin surface; `get-file-fragment` is for embedded fragments, not used. |
-| Comments | `get-comment-threads`, `get-comment-thread`, `get-comments`, `create-comment-thread`, `create-comment`, `update-comment`, `update-comment-thread`, `update-comment-thread-status` | Read + reply; only read is exposed. |
+| Comments | `get-comment-threads`, `get-comment-thread`, `get-comments`, `create-comment-thread`, `create-comment`, `update-comment`, `delete-comment`, `update-comment-thread`, `update-comment-thread-status` | Read, create, reply, edit, delete and resolve. |
 | Snapshots | `get-file-snapshots`, `get-file-snapshot`, `create-file-snapshot`, `restore-file-snapshot`, `delete-file-snapshot`, `lock-file-snapshot`, `unlock-file-snapshot` | List/create exposed; restore/lock/delete are deliberate omissions. |
 | Libraries | `get-file-libraries`, `get-library-file-references`, `link-file-to-library`, `unlink-file-from-library`, `get-library-usage`, `update-file-library-sync-status` | Read exposed; linking is a design-system admin action. |
 | Templates | `get-builtin-templates`, `clone-template` | Exposed; clone can create one or more files. |
 | Fonts | `get-font-variants`, `create-font-variant`, `update-font`, `delete-font`, `download-font`, `download-font-family` | Not exposed; the design agent can use font names from shapes. |
-| Media | `upload-file-media-object`, `create-file-media-object-from-url`, `assemble-file-media-object`, `clone-file-media-object`, `create-upload-session`, `upload-chunk`, `get-file-object-thumbnails`, `create-file-object-thumbnail`, `delete-file-object-thumbnail` | Not exposed; byte access is proxy-blocked. |
+| Media | `upload-file-media-object`, `create-file-media-object-from-url`, `assemble-file-media-object`, `clone-file-media-object`, `create-upload-session`, `upload-chunk`, `get-file-object-thumbnails`, `create-file-object-thumbnail`, `delete-file-object-thumbnail` | Image upload exposed via `penpot_add_image`; asset bytes via `penpot_download_asset` when proxied. |
 | Design tokens | `update-file` change types (`set-token`, `set-token-set`, `set-token-theme`, `set-active-token-themes`) | Token writes are part of `update-file`; not exposed. |
 | Auth and profile | `login-with-password`, `login-with-ldap`, `verify-token`, `create-access-token`, `get-access-tokens`, `delete-access-token`, `update-profile*`, `register-profile`, `recover-profile` | Out of scope; the plugin takes an existing token. |
 | Team admin | invitations, roles, membership, organization, subscription, nitrate/SSO | Out of scope. |
@@ -128,15 +145,14 @@ The 2.18.6 RPC has 150 commands. Grouped by area:
 
 ## Candidate next steps
 
-1. **Wrapped text metrics** — measure text width server-side or accept a line
-   width/height and wrap explicitly.
-2. **More shape primitives** — groups, paths, images and component instances.
-3. **Components** — list components/variants/instances and their usage.
-4. **Prototype flows** — read start points and connections.
-5. **Media download** — once the deployment proxies `/assets/by-id/`; return a
-   local preview path.
-6. **Design diff** — compare a snapshot/export with the current file and report
-   changed frames/layers.
+1. **Exact text metrics** — replace the approximate wrap with font-file metrics
+   where available.
+2. **More primitives** — paths, booleans and component instances.
+3. **Component creation/sync** — create a main component, place instances.
+4. **Preview fidelity** — real image bytes in SVG/PNG, paths and effects;
+   optional headless Chromium rendering of Penpot's viewer.
+5. **Media bytes** — requires the `/assets/by-id/` proxy.
+6. **Design diff** — compare a snapshot/export with the current file.
 
 ## Verifying a feature
 

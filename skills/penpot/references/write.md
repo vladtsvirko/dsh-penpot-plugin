@@ -16,7 +16,10 @@ components) and for debugging a refusal.
 | Text | `penpot_add_text` |
 | Change copy | `penpot_update_text` |
 | Change fill/radius/opacity/name/geometry | `penpot_update_shape` |
+| Image | `penpot_add_image` |
+| Group / ungroup | `penpot_group_shapes`, `penpot_ungroup_shape` |
 | Remove a layer | `penpot_delete_shape` |
+| Prototype flow / interaction | `penpot_create_flow`, `penpot_add_interaction` |
 
 The add tools take **page coordinates**, not frame-local coordinates. They
 return the new shape id; call `penpot_outline` on the frame to verify. Text
@@ -176,6 +179,23 @@ behind. For each direct child, `assign`:
     : {})
 }
 ```
+
+## Images, groups and prototypes
+
+- **Image:** upload media first (`upload-file-media-object` multipart with field
+  `content`, or `create-file-media-object-from-url`), then add an `image` shape
+  with `metadata: {id, width, height, mtype}`. `metadata.id` is the media object
+  id, not the storage `mediaId`.
+- **Group:** `penpot_group_shapes` adds a group with the selected child ids,
+  rewrites the frame's `shapes` order, and assigns each child's `parentId`.
+  Penpot's `mov-objects` change alone did not update parent links in testing, so
+  the tool uses the explicit parent/shape changes. `penpot_ungroup_shape` clears
+  the group's `shapes` before deleting it; otherwise `del-obj` cascades to the
+  children.
+- **Flow:** `set-flow` uses the client JSON key `starting-frame`; the stored
+  page data returns it as `startingFrame`.
+- **Interaction:** append to `shape.interactions` and `assign` the array. Raw
+  interaction keys are `eventType` / `actionType`, not kebab-case.
 
 ## Validation and debugging
 

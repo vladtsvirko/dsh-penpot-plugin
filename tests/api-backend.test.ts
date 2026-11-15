@@ -162,6 +162,41 @@ describe('api backend', () => {
     expect(JSON.parse(calls[2]?.body ?? '{}')).toEqual({ id: 'thread-1', 'is-resolved': true })
   })
 
+  it('uploads media from a path and creates media from a URL', async () => {
+    const base = await start((call, response) => {
+      if (call.url.includes('upload-file-media-object')) {
+        json(response, { id: 'media-1', mediaId: 'storage-1', width: 400, height: 300, mtype: 'image/png', name: 'Cover' })
+        return
+      }
+      json(response, { id: 'media-2', mediaId: 'storage-2', width: 10, height: 20, mtype: 'image/jpeg', name: 'Url image' })
+    })
+    const dir = await mkdtemp(join(tmpdir(), 'penpot-media-'))
+    try {
+      const file = join(dir, 'cover.png')
+      await writeFile(file, 'pngbytes')
+      const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+      expect(await backend.uploadMedia({ fileId: 'file-1', path: file, name: 'Cover' })).toMatchObject({ id: 'media-1', width: 400, height: 300, mtype: 'image/png' })
+      expect(calls[0]?.body).toContain('name="content"; filename="cover.png"')
+      expect(calls[0]?.body).toContain('Content-Type: image/png')
+      expect(await backend.createMediaFromUrl({ fileId: 'file-1', url: 'https://example.test/x.jpg' })).toMatchObject({ id: 'media-2', width: 10, height: 20 })
+      expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({ 'file-id': 'file-1', 'is-local': false, url: 'https://example.test/x.jpg' })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('edits and deletes comments', async () => {
+    const base = await start((_call, response) => {
+      response.writeHead(204)
+      response.end()
+    })
+    const backend = createApiBackend({ apiUrl: base, token: 'tok' })
+    await backend.updateComment({ commentId: 'comment-1', content: 'Updated' })
+    await backend.deleteComment({ commentId: 'comment-1' })
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ id: 'comment-1', content: 'Updated' })
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({ id: 'comment-1' })
+  })
+
   it('reads the SSE export URL and the SSE import id', async () => {
     let downloadUrl = ''
     const base = await start((call, response) => {

@@ -38,6 +38,29 @@ the deployment. The proxy must forward `/assets/by-id/` to the backend (the same
 origin that serves the RPC API). This is not a plugin bug and not fixable from
 the token.
 
+## Image URL rejected
+
+- `ssrf-blocked-target`: Penpot refuses private/LAN addresses. Use a local
+  `path` upload or a genuinely public URL.
+- `unable-to-download-image`: the Penpot server cannot reach the URL. A URL that
+  works from the DSH host is not necessarily reachable from the Penpot host.
+- `media-type-not-allowed`: the upload's MIME type is missing or unsupported.
+  The plugin sends the type from the file extension; use PNG/JPEG/WebP/GIF/SVG.
+- Media uploads use multipart field `content`; a JSON `content` map is not a
+  file upload.
+
+## Headless preview fails
+
+- `penpot_frame_png needs a headless browser`: set the absolute browser path on
+  the Plugins page (or `PENPOT_BROWSER_PATH`).
+- The browser must support `--headless=new`. Point at a current Chrome/Chromium.
+- Exit 0 with no file, or a size mismatch, usually means the screenshot flag was
+  not honoured; inspect the browser's stderr.
+- The PNG is the plugin's SVG, not Penpot's canvas. Images are placeholders and
+  paths/effects are omitted; use `penpot_frame_svg` and read `limitations`.
+- On Linux, a root/sandbox setup may need a non-root user; the plugin does not
+  add `--no-sandbox`.
+
 ## Export “finished without a download URL”
 
 The `end` event shape changed across Penpot versions:
@@ -137,7 +160,8 @@ For an outline, set `depth` and `maxShapes`. The tool reports when it truncates.
 `get-comment-threads` returns only threads visible to the account. On a file
 with no comments it returns `[]`. A thread anchor needs `frame-id` and
 `page-id`; if you create one manually, use a point inside the frame. The plugin
-currently reads threads; it does not create or resolve them.
+can create, reply, edit, delete and resolve threads/comments; a thread anchor
+needs a frame and page.
 
 ## Templates
 

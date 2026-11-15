@@ -80,6 +80,30 @@ is cheap safety.
 base revision; a mismatched `vern` is a conflict. Use a fresh random
 `session-id` per request.
 
+### Media and images
+
+| Command | Body | Returns |
+|---|---|---|
+| `upload-file-media-object` | multipart: `file-id`, `is-local`, `name`, `content` file | media object with `id`, `mediaId`, `width`, `height`, `mtype` |
+| `create-file-media-object-from-url` | `{"file-id","is-local","url","name"?}` | media object; private/SSRF targets are rejected |
+
+An `image` shape carries `metadata: {id, width, height, mtype}` where `id` is
+the file media object id returned by these commands. The media bytes themselves
+are not in `get-file`.
+
+### Prototype flows and interactions
+
+| Command / change | Meaning |
+|---|---|
+| page `flows` map | `{id, name, startingFrame}` entries |
+| shape `interactions` array | `{eventType, actionType, destination?, url?, …}` |
+| `set-flow` change | `{"page-id","id","params":{"id","name","starting-frame"}}` |
+| `mod-obj` assign `interactions` | append/replace a shape's interaction list |
+
+Action types: `navigate`, `open-overlay`, `toggle-overlay`, `close-overlay`,
+`prev-screen`, `open-url`. Event types: `click`, `mouse-press`, `mouse-over`,
+`mouse-enter`, `mouse-leave`, `after-delay`.
+
 ### Comment writes
 
 | Command | Body | Returns |
@@ -88,6 +112,7 @@ base revision; a mismatched `vern` is a conflict. Use a fresh random
 | `create-comment` | `{"thread-id","content"}` | comment with `id` |
 | `update-comment-thread` | `{"id","is-resolved":true|false}` | 204; then read threads |
 | `update-comment` | `{"id","content"}` | edit an existing comment |
+| `delete-comment` | `{"id"}` | delete an individual comment |
 
 ### File management
 

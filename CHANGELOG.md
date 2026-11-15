@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.10.0
+
+This is the final pre-1.0 release. 1.0.0 is cut after user testing.
+
+- **Text wraps.** `penpot_add_text` and `penpot_update_text` use an approximate
+  glyph metric and greedy word wrapping (`wrap: true`, the default). Each line
+  gets a `positionData` entry and the box height is recomputed. `wrap: false`
+  preserves explicit-line behavior. The metric is an estimate, not Penpot's font
+  layout.
+- **Images.** `penpot_add_image` uploads a local file through the multipart
+  media RPC or asks Penpot to fetch a public URL, then adds an `image` shape with
+  the media metadata. Penpot blocks private/SSRF targets, so a local path is the
+  reliable route; URL fetch errors are reported.
+- **Groups.** `penpot_group_shapes` and `penpot_ungroup_shape` preserve frame
+  z-order and child parent links. Penpot's `mov-objects` change did not update
+  parent links on 2.18.6, so the tools use explicit frame/child changes.
+- **Comments.** `penpot_update_comment` and `penpot_delete_comment` complete the
+  comment surface; resolving/reopening stays in `penpot_resolve_comment`.
+- **Components read.** `penpot_components` lists/inspects components and
+  `penpot_component_instances` finds usages. Component object maps are often not
+  in `get-file`; the inspector falls back to the main instance subtree.
+- **Prototypes.** `penpot_prototype` reads page flows and shape interactions;
+  `penpot_create_flow` and `penpot_add_interaction` write flows, navigate,
+  overlay, back and open-url interactions.
+- **Frame preview.** `penpot_frame_svg` is a best-effort renderer for frames,
+  rects, circles, text, groups and solid styles, with a `limitations` list.
+  `penpot_frame_png` rasterizes that SVG through a **user-configured headless
+  browser** (`browserPath` in the Plugins form / `PENPOT_BROWSER_PATH`). No
+  browser is bundled. Images are placeholders and paths/effects are omitted.
+- **Asset download.** `penpot_download_asset` writes an asset id to disk when the
+  deployment proxies `/assets/by-id/`. The existing export remains subject to
+  the same proxy requirement.
+- **Configuration.** The Plugins form now has API URL, token and an optional
+  headless-browser path. All three are volatile and save live.
+- 44 tools, 41 tests across backend, shape builders, text wrap, SVG renderer,
+  design analysis and client form. Live-tested on 2.18.6: wrapped text, local
+  image upload and placement, group/ungroup, component list/inspect, flow and
+  interaction, frame SVG/PNG, comment edit/delete, and asset download failure
+  through the known proxy gap.
+- Still open for 1.0.0: exact font metrics, paths/booleans/component creation,
+  real image bytes and paths in the preview renderer, and the deployment
+  `/assets/by-id/` proxy.
+
 ## 0.6.1
 
 - **Shapes are editable, not just append-only.** `penpot_update_shape` changes a
